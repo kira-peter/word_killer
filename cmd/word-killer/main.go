@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/word-killer/word-killer/pkg/config"
@@ -10,7 +11,10 @@ import (
 	"github.com/word-killer/word-killer/pkg/ui"
 )
 
-// model 是 Bubble Tea 的模型
+// tickMsg is sent on every tick to update the display
+type tickMsg time.Time
+
+// model is the Bubble Tea model
 type model struct {
 	game   *game.Game
 	cfg    *config.Config
@@ -28,7 +32,13 @@ func initialModel(cfg *config.Config, g *game.Game) model {
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return tickCmd()
+}
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -40,13 +50,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
+
+	case tickMsg:
+		// Only update display during game, not in menus
+		if m.ready && m.game.Status == game.StatusRunning {
+			return m, tickCmd()
+		}
+		return m, tickCmd()
 	}
 
 	return m, nil
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// 等待开始
+	// Waiting to start
 	if !m.ready {
 		switch msg.String() {
 		case "enter":
@@ -60,7 +77,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// 游戏进行中
+	// Game running
 	if m.game.Status == game.StatusRunning {
 		switch msg.String() {
 		case "esc":
@@ -70,7 +87,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "backspace":
 			m.game.Backspace()
 		default:
-			// 字母键
+			// Letter keys
 			runes := []rune(msg.String())
 			if len(runes) == 1 {
 				r := runes[0]
@@ -83,15 +100,15 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// 检查游戏状态
+		// Check game status
 		if m.game.Status == game.StatusFinished {
-			// 游戏结束，等待用户按键后退出
+			// Game ended, wait for user to press a key then exit
 			return m, nil
 		}
 
 		return m, nil
 	} else if m.game.Status == game.StatusPaused {
-		// 暂停菜单
+		// Pause menu
 		switch msg.String() {
 		case "up", "k":
 			m.game.MovePauseMenu(-1)
@@ -99,7 +116,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.game.MovePauseMenu(1)
 		case "enter":
 			m.game.ConfirmPauseMenu()
-			// 如果选择了退出，检查状态
+			// If quit was selected, check status
 			if m.game.Status == game.StatusFinished {
 				return m, nil
 			}
@@ -108,7 +125,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	} else if m.game.Status == game.StatusFinished {
-		// 结果页面，按任意键退出
+		// Results page, press any key to exit
 		return m, tea.Quit
 	}
 

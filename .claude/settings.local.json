@@ -12,7 +12,8 @@
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nrefactor: 将所有UI显示改为英文\n\n- 更新欢迎界面、游戏界面、暂停菜单、结果页面的所有文本\n- 更新代码注释为英文\n- 更新错误消息为英文\n- 保持功能不变，仅改变显示语言\n\nChanges:\n- pkg/ui/styles.go: All UI text translated to English\n- pkg/config/config.go: Comments and error messages in English\n- pkg/game/game.go: Comments and error messages in English\n- cmd/word-killer/main.go: Error messages in English\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git push:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: 修正准确率计算 - Enter键成功消除单词时应算作正确输入\n\n问题：\n- 当输入完整单词后按Enter成功消除时，Enter键被计入总敲击数\n- 但没有计入正确字符数，导致准确率被错误降低\n\n修复：\n- 在成功消除单词时，将Enter键也计入正确字符数\n- 现在100%正确的输入将得到100%的准确率\n\nExample:\n- 输入 \"hello\" + Enter 消除\n- Before: 总敲击=6, 正确=5, 准确率=83.33%\n- After:  总敲击=6, 正确=6, 准确率=100%\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: 修正准确率计算 - Enter键成功消除单词时应算作正确输入\n\n问题：\n- 当输入完整单词后按Enter成功消除时，Enter键被计入总敲击数\n- 但没有计入正确字符数，导致准确率被错误降低\n\n修复：\n- 在成功消除单词时，将Enter键也计入正确字符数\n- 现在100%正确的输入将得到100%的准确率\n\nExample:\n- 输入 \"hello\" + Enter 消除\n- Before: 总敲击=6, 正确=5, 准确率=83.33%\n- After:  总敲击=6, 正确=6, 准确率=100%\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: 添加实时时间更新 - 保持无频闪渲染\n\n改进：\n- 添加每100ms一次的定时器tick，实时更新游戏时间和统计数据\n- 使用Bubble Tea的tea.Tick机制，保持流畅无频闪的渲染\n- 只在游戏进行中（StatusRunning）时更新，不影响菜单性能\n\n技术实现：\n- 新增tickMsg消息类型，定期触发视图更新\n- Init\\(\\)返回tickCmd启动定时器\n- Update处理tickMsg并返回下一个tick命令\n- Bubble Tea的智能差异渲染确保无频闪\n\n效果：\n- 时间每0.1秒更新一次，流畅准确\n- 速度统计实时变化\n- 完全无屏幕闪烁\n- 不增加CPU负担（Bubble Tea优化）\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }
