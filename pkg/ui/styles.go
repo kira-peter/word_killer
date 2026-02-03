@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -36,6 +37,16 @@ var (
 
 	menuNormalStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("252"))
+
+	// Completed word styles
+	completedWordStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("240")).
+				Strikethrough(true)
+
+	animatingWordStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("46")).
+				Bold(true).
+				Blink(true)
 
 	// New styles for professional layout
 	headerStyle = lipgloss.NewStyle().
@@ -82,6 +93,13 @@ type GameStats struct {
 	AccuracyPercent  float64
 }
 
+// WordInfo contains word display information
+type WordInfo struct {
+	Text        string
+	Completed   bool
+	CompletedAt time.Time
+}
+
 // RenderWelcome renders welcome screen
 func RenderWelcome() string {
 	var s string
@@ -101,11 +119,11 @@ func RenderWelcome() string {
 }
 
 // RenderGame renders game screen with professional layout
-func RenderGame(words []string, highlightedIndices []int, input string, stats GameStats) string {
+func RenderGame(words []WordInfo, highlightedIndices []int, input string, stats GameStats, remainingWords int) string {
 	var s strings.Builder
 
 	// === TOP: Status Bar ===
-	statusBar := renderStatusBar(stats, len(words))
+	statusBar := renderStatusBar(stats, remainingWords)
 	s.WriteString(statusBar)
 	s.WriteString("\n")
 
@@ -155,7 +173,7 @@ func renderStatusBar(stats GameStats, remainingWords int) string {
 }
 
 // renderWordArea renders the middle word list area
-func renderWordArea(words []string, highlightedIndices []int, input string) string {
+func renderWordArea(words []WordInfo, highlightedIndices []int, input string) string {
 	if len(words) == 0 {
 		return wordBoxStyle.Render(statsStyle.Render("All words completed! Press Enter to finish..."))
 	}
@@ -170,27 +188,48 @@ func renderWordArea(words []string, highlightedIndices []int, input string) stri
 		var rowWords []string
 		for j := 0; j < wordsPerRow && i+j < len(words); j++ {
 			idx := i + j
-			word := words[idx]
+			wordInfo := words[idx]
 
-			// Check if highlighted
+			// Check if highlighted (only for active words)
 			isHighlighted := false
-			for _, hIdx := range highlightedIndices {
-				if hIdx == idx {
-					isHighlighted = true
-					break
+			if !wordInfo.Completed {
+				for _, hIdx := range highlightedIndices {
+					if hIdx == idx {
+						isHighlighted = true
+						break
+					}
 				}
 			}
 
 			var renderedWord string
-			if isHighlighted && len(input) > 0 {
-				// Highlight matched part
-				matchLen := len(input)
-				if matchLen > len(word) {
-					matchLen = len(word)
+
+			// Check if word is in animation (just completed, within 0.5s)
+			if wordInfo.Completed {
+				timeSinceCompletion := time.Since(wordInfo.CompletedAt)
+				if timeSinceCompletion < 500*time.Millisecond {
+					// Animation phase: blink effect
+					blinkCycle := int(timeSinceCompletion.Milliseconds() / 100)
+					if blinkCycle%2 == 0 {
+						// Bright green flash
+						renderedWord = animatingWordStyle.Render(wordInfo.Text)
+					} else {
+						// Dark gray flash
+						renderedWord = completedWordStyle.Render(wordInfo.Text)
+					}
+				} else {
+					// Animation done, show as completed (gray with strikethrough)
+					renderedWord = completedWordStyle.Render(wordInfo.Text)
 				}
-				renderedWord = highlightStyle.Render(word[:matchLen]) + wordStyle.Render(word[matchLen:])
+			} else if isHighlighted && len(input) > 0 {
+				// Highlight matched part for active words
+				matchLen := len(input)
+				if matchLen > len(wordInfo.Text) {
+					matchLen = len(wordInfo.Text)
+				}
+				renderedWord = highlightStyle.Render(wordInfo.Text[:matchLen]) + wordStyle.Render(wordInfo.Text[matchLen:])
 			} else {
-				renderedWord = wordStyle.Render(word)
+				// Normal active word
+				renderedWord = wordStyle.Render(wordInfo.Text)
 			}
 
 			// Pad word to fixed width for alignment

@@ -138,8 +138,19 @@ func (m model) View() string {
 	}
 
 	if m.game.Status == game.StatusRunning {
-		words := m.game.GetActiveWords()
+		// Get all words (including completed ones)
+		allWords := m.game.GetAllWords()
+		wordInfos := make([]ui.WordInfo, len(allWords))
+		for i, w := range allWords {
+			wordInfos[i] = ui.WordInfo{
+				Text:        w.Text,
+				Completed:   w.Completed,
+				CompletedAt: w.CompletedAt,
+			}
+		}
+
 		highlighted := m.game.GetMatchedIndices()
+		activeWords := m.game.GetActiveWords()
 
 		stats := ui.GameStats{
 			TotalKeystrokes:   m.game.Stats.TotalKeystrokes,
@@ -153,7 +164,7 @@ func (m model) View() string {
 			AccuracyPercent:   m.game.Stats.GetAccuracyPercent(),
 		}
 
-		return ui.RenderGame(words, highlighted, m.game.InputBuffer, stats)
+		return ui.RenderGame(wordInfos, highlighted, m.game.InputBuffer, stats, len(activeWords))
 	} else if m.game.Status == game.StatusPaused {
 		return ui.RenderPauseMenu(m.game.PauseMenuIndex)
 	} else if m.game.Status == game.StatusFinished {

@@ -23,8 +23,9 @@ const (
 
 // Word represents a word in the game
 type Word struct {
-	Text      string
-	Completed bool
+	Text         string
+	Completed    bool
+	CompletedAt  time.Time // when the word was completed (for animation)
 }
 
 // Game core game logic
@@ -171,6 +172,7 @@ func (g *Game) TryEliminate() {
 			// Eliminate word - this Enter key should be counted as correct
 			g.Stats.AddCorrectChar()
 			g.Words[i].Completed = true
+			g.Words[i].CompletedAt = time.Now() // record completion time for animation
 			g.Stats.AddCompletedWord(len(g.Words[i].Text))
 			g.InputBuffer = ""
 
@@ -243,7 +245,12 @@ func (g *Game) finish(aborted bool) {
 	g.Stats.Finish()
 }
 
-// GetActiveWords 获取未完成的单词
+// GetAllWords returns all words (including completed ones)
+func (g *Game) GetAllWords() []Word {
+	return g.Words
+}
+
+// GetActiveWords gets uncompleted words (for stats display)
 func (g *Game) GetActiveWords() []string {
 	words := make([]string, 0)
 	for _, w := range g.Words {
@@ -254,23 +261,21 @@ func (g *Game) GetActiveWords() []string {
 	return words
 }
 
-// GetMatchedIndices 获取匹配单词的索引
+// GetMatchedIndices gets matched word indices (only for active words)
 func (g *Game) GetMatchedIndices() []int {
 	if g.InputBuffer == "" {
 		return nil
 	}
 
 	indices := make([]int, 0)
-	activeIdx := 0
-	for _, w := range g.Words {
+	for i, w := range g.Words {
 		if w.Completed {
 			continue
 		}
 
 		if strings.HasPrefix(w.Text, g.InputBuffer) {
-			indices = append(indices, activeIdx)
+			indices = append(indices, i)
 		}
-		activeIdx++
 	}
 
 	return indices
