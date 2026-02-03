@@ -153,7 +153,7 @@ func (g *Game) Backspace() {
 	}
 }
 
-// TryEliminate 尝试消除单词
+// TryEliminate tries to eliminate a word
 func (g *Game) TryEliminate() {
 	if g.Status != StatusRunning {
 		return
@@ -165,15 +165,16 @@ func (g *Game) TryEliminate() {
 		return
 	}
 
-	// 查找完全匹配的单词
+	// Find completely matched word
 	for i := range g.Words {
 		if !g.Words[i].Completed && g.Words[i].Text == g.InputBuffer {
-			// 消除单词
+			// Eliminate word - this Enter key should be counted as correct
+			g.Stats.AddCorrectChar()
 			g.Words[i].Completed = true
 			g.Stats.AddCompletedWord(len(g.Words[i].Text))
 			g.InputBuffer = ""
 
-			// 检查是否完成
+			// Check if all completed
 			if g.isAllCompleted() {
 				g.finish(false)
 			}

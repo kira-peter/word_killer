@@ -10,7 +10,9 @@
       "Bash(go mod tidy:*)",
       "Bash(go build:*)",
       "Bash(git add:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nrefactor: 将所有UI显示改为英文\n\n- 更新欢迎界面、游戏界面、暂停菜单、结果页面的所有文本\n- 更新代码注释为英文\n- 更新错误消息为英文\n- 保持功能不变，仅改变显示语言\n\nChanges:\n- pkg/ui/styles.go: All UI text translated to English\n- pkg/config/config.go: Comments and error messages in English\n- pkg/game/game.go: Comments and error messages in English\n- cmd/word-killer/main.go: Error messages in English\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nrefactor: 将所有UI显示改为英文\n\n- 更新欢迎界面、游戏界面、暂停菜单、结果页面的所有文本\n- 更新代码注释为英文\n- 更新错误消息为英文\n- 保持功能不变，仅改变显示语言\n\nChanges:\n- pkg/ui/styles.go: All UI text translated to English\n- pkg/config/config.go: Comments and error messages in English\n- pkg/game/game.go: Comments and error messages in English\n- cmd/word-killer/main.go: Error messages in English\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: 修正准确率计算 - Enter键成功消除单词时应算作正确输入\n\n问题：\n- 当输入完整单词后按Enter成功消除时，Enter键被计入总敲击数\n- 但没有计入正确字符数，导致准确率被错误降低\n\n修复：\n- 在成功消除单词时，将Enter键也计入正确字符数\n- 现在100%正确的输入将得到100%的准确率\n\nExample:\n- 输入 \"hello\" + Enter 消除\n- Before: 总敲击=6, 正确=5, 准确率=83.33%\n- After:  总敲击=6, 正确=6, 准确率=100%\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }
