@@ -159,31 +159,31 @@ func (m model) View() string {
 }
 
 func main() {
-	// 加载配置
+	// Load configuration
 	cfg, err := config.Load("config.json")
 	if err != nil {
-		fmt.Printf("加载配置失败: %v\n", err)
+		fmt.Printf("Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 创建游戏实例
+	// Create game instance
 	g := game.New()
 
-	// 加载词库
+	// Load word dictionary
 	if err := g.LoadWordDict(cfg.WordDictPath); err != nil {
-		fmt.Printf("加载词库失败: %v\n", err)
+		fmt.Printf("Failed to load word dictionary: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 创建 Bubble Tea 程序
+	// Create Bubble Tea program
 	p := tea.NewProgram(
 		initialModel(cfg, g),
-		tea.WithAltScreen(),       // 使用备用屏幕缓冲区
-		tea.WithMouseCellMotion(), // 启用鼠标支持（可选）
+		tea.WithAltScreen(),       // use alternate screen buffer
+		tea.WithMouseCellMotion(), // enable mouse support (optional)
 	)
 
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("运行失败: %v\n", err)
+		fmt.Printf("Failed to run: %v\n", err)
 		os.Exit(1)
 	}
 }

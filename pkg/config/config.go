@@ -6,56 +6,56 @@ import (
 	"os"
 )
 
-// Config 游戏配置
+// Config game configuration
 type Config struct {
-	// WordDictPath 单词词库文件路径
+	// WordDictPath word dictionary file path
 	WordDictPath string `json:"word_dict_path"`
-	// WordCount 每场游戏的单词数量（0 表示不限制）
+	// WordCount number of words per game (0 means unlimited)
 	WordCount int `json:"word_count"`
 }
 
-// DefaultConfig 返回默认配置
+// DefaultConfig returns default configuration
 func DefaultConfig() *Config {
 	return &Config{
 		WordDictPath: "data/words.txt",
-		WordCount:    20, // 默认 20 个单词
+		WordCount:    20, // default 20 words
 	}
 }
 
-// Load 加载配置文件
+// Load loads configuration file
 func Load(path string) (*Config, error) {
-	// 如果文件不存在，使用默认配置
+	// Use default config if file doesn't exist
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return DefaultConfig(), nil
 	}
 
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("打开配置文件失败: %w", err)
+		return nil, fmt.Errorf("failed to open config file: %w", err)
 	}
 	defer file.Close()
 
 	var cfg Config
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("解析配置文件失败: %w", err)
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
 	return &cfg, nil
 }
 
-// Save 保存配置到文件
+// Save saves configuration to file
 func Save(cfg *Config, path string) error {
 	file, err := os.Create(path)
 	if err != nil {
-		return fmt.Errorf("创建配置文件失败: %w", err)
+		return fmt.Errorf("failed to create config file: %w", err)
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(cfg); err != nil {
-		return fmt.Errorf("写入配置文件失败: %w", err)
+		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
 	return nil

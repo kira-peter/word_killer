@@ -8,7 +8,9 @@
       "Bash(go run:*)",
       "Bash(go get:*)",
       "Bash(go mod tidy:*)",
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nrefactor: 将所有UI显示改为英文\n\n- 更新欢迎界面、游戏界面、暂停菜单、结果页面的所有文本\n- 更新代码注释为英文\n- 更新错误消息为英文\n- 保持功能不变，仅改变显示语言\n\nChanges:\n- pkg/ui/styles.go: All UI text translated to English\n- pkg/config/config.go: Comments and error messages in English\n- pkg/game/game.go: Comments and error messages in English\n- cmd/word-killer/main.go: Error messages in English\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

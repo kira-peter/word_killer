@@ -11,7 +11,7 @@ import (
 	"github.com/word-killer/word-killer/pkg/stats"
 )
 
-// GameStatus 游戏状态
+// GameStatus game status
 type GameStatus int
 
 const (
@@ -21,26 +21,26 @@ const (
 	StatusFinished
 )
 
-// Word 单词
+// Word represents a word in the game
 type Word struct {
 	Text      string
 	Completed bool
 }
 
-// Game 游戏核心
+// Game core game logic
 type Game struct {
 	Status           GameStatus
 	Words            []Word
 	InputBuffer      string
 	Stats            *stats.Statistics
-	PauseMenuIndex   int // 暂停菜单选中索引 (0=继续, 1=结束)
+	PauseMenuIndex   int // pause menu selected index (0=resume, 1=quit)
 	Aborted          bool
 	wordPool         []string
 	usedWords        map[string]bool
 	rng              *rand.Rand
 }
 
-// New 创建游戏实例
+// New creates a new game instance
 func New() *Game {
 	return &Game{
 		Status:         StatusIdle,
@@ -51,11 +51,11 @@ func New() *Game {
 	}
 }
 
-// LoadWordDict 加载单词词库
+// LoadWordDict loads word dictionary
 func (g *Game) LoadWordDict(path string) error {
 	file, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("打开词库文件失败: %w", err)
+		return fmt.Errorf("failed to open word dictionary: %w", err)
 	}
 	defer file.Close()
 
@@ -69,23 +69,23 @@ func (g *Game) LoadWordDict(path string) error {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("读取词库文件失败: %w", err)
+		return fmt.Errorf("failed to read word dictionary: %w", err)
 	}
 
 	if len(g.wordPool) == 0 {
-		return fmt.Errorf("词库为空")
+		return fmt.Errorf("word dictionary is empty")
 	}
 
 	return nil
 }
 
-// Start 开始游戏
+// Start starts the game
 func (g *Game) Start(wordCount int) error {
 	if len(g.wordPool) == 0 {
-		return fmt.Errorf("词库未加载")
+		return fmt.Errorf("word dictionary not loaded")
 	}
 
-	// 重置游戏状态
+	// Reset game state
 	g.Status = StatusRunning
 	g.InputBuffer = ""
 	g.Aborted = false
@@ -93,7 +93,7 @@ func (g *Game) Start(wordCount int) error {
 	g.Stats.Start()
 	g.usedWords = make(map[string]bool)
 
-	// 生成游戏单词
+	// Generate game words
 	g.Words = g.generateWords(wordCount)
 
 	return nil
