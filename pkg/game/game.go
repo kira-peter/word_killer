@@ -1,0 +1,316 @@
+package game
+
+import (
+	"bufio"
+	"fmt"
+	"math/rand"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/word-killer/word-killer/pkg/stats"
+)
+
+// GameStatus 游戏状态
+type GameStatus int
+
+const (
+	StatusIdle GameStatus = iota
+	StatusRunning
+	StatusPaused
+	StatusFinished
+)
+
+// Word 单词
+type Word struct {
+	Text      string
+	Completed bool
+}
+
+// Game 游戏核心
+type Game struct {
+	Status           GameStatus
+	Words            []Word
+	InputBuffer      string
+	Stats            *stats.Statistics
+	PauseMenuIndex   int // 暂停菜单选中索引 (0=继续, 1=结束)
+	Aborted          bool
+	wordPool         []string
+	usedWords        map[string]bool
+	rng              *rand.Rand
+}
+
+// New 创建游戏实例
+func New() *Game {
+	return &Game{
+		Status:         StatusIdle,
+		Stats:          stats.New(),
+		PauseMenuIndex: 0,
+		usedWords:      make(map[string]bool),
+		rng:            rand.New(rand.NewSource(time.Now().UnixNano())),
+	}
+}
+
+// LoadWordDict 加载单词词库
+func (g *Game) LoadWordDict(path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("打开词库文件失败: %w", err)
+	}
+	defer file.Close()
+
+	g.wordPool = make([]string, 0)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		word := strings.TrimSpace(scanner.Text())
+		if word != "" && isValidWord(word) {
+			g.wordPool = append(g.wordPool, word)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("读取词库文件失败: %w", err)
+	}
+
+	if len(g.wordPool) == 0 {
+		return fmt.Errorf("词库为空")
+	}
+
+	return nil
+}
+
+// Start 开始游戏
+func (g *Game) Start(wordCount int) error {
+	if len(g.wordPool) == 0 {
+		return fmt.Errorf("词库未加载")
+	}
+
+	// 重置游戏状态
+	g.Status = StatusRunning
+	g.InputBuffer = ""
+	g.Aborted = false
+	g.Stats.Reset()
+	g.Stats.Start()
+	g.usedWords = make(map[string]bool)
+
+	// 生成游戏单词
+	g.Words = g.generateWords(wordCount)
+
+	return nil
+}
+
+// generateWords 生成游戏单词
+func (g *Game) generateWords(count int) []Word {
+	// 如果词库数量不足，使用全部
+	if count <= 0 || count > len(g.wordPool) {
+		count = len(g.wordPool)
+	}
+
+	words := make([]Word, 0, count)
+	availableWords := make([]string, len(g.wordPool))
+	copy(availableWords, g.wordPool)
+
+	for i := 0; i < count && len(availableWords) > 0; i++ {
+		// 随机选择一个单词
+		idx := g.rng.Intn(len(availableWords))
+		word := availableWords[idx]
+
+		words = append(words, Word{Text: word, Completed: false})
+		g.usedWords[word] = true
+
+		// 移除已选单词
+		availableWords = append(availableWords[:idx], availableWords[idx+1:]...)
+	}
+
+	return words
+}
+
+// AddChar 添加字符到输入缓冲区
+func (g *Game) AddChar(ch rune) {
+	if g.Status != StatusRunning {
+		return
+	}
+
+	g.InputBuffer += string(ch)
+	g.Stats.AddKeystroke()
+
+	// 检查是否匹配
+	if g.hasMatch() {
+		g.Stats.AddValidKeystroke()
+		g.Stats.AddCorrectChar()
+	}
+}
+
+// Backspace 删除最后一个字符
+func (g *Game) Backspace() {
+	if g.Status != StatusRunning {
+		return
+	}
+
+	if len(g.InputBuffer) > 0 {
+		g.InputBuffer = g.InputBuffer[:len(g.InputBuffer)-1]
+		g.Stats.AddKeystroke()
+	}
+}
+
+// TryEliminate 尝试消除单词
+func (g *Game) TryEliminate() {
+	if g.Status != StatusRunning {
+		return
+	}
+
+	g.Stats.AddKeystroke()
+
+	if g.InputBuffer == "" {
+		return
+	}
+
+	// 查找完全匹配的单词
+	for i := range g.Words {
+		if !g.Words[i].Completed && g.Words[i].Text == g.InputBuffer {
+			// 消除单词
+			g.Words[i].Completed = true
+			g.Stats.AddCompletedWord(len(g.Words[i].Text))
+			g.InputBuffer = ""
+
+			// 检查是否完成
+			if g.isAllCompleted() {
+				g.finish(false)
+			}
+			return
+		}
+	}
+}
+
+// Pause 暂停游戏
+func (g *Game) Pause() {
+	if g.Status == StatusRunning {
+		g.Status = StatusPaused
+		g.PauseMenuIndex = 0
+		g.Stats.Pause()
+	}
+}
+
+// Resume 恢复游戏
+func (g *Game) Resume() {
+	if g.Status == StatusPaused {
+		g.Status = StatusRunning
+		g.Stats.Resume()
+	}
+}
+
+// MovePauseMenu 移动暂停菜单选项
+func (g *Game) MovePauseMenu(delta int) {
+	if g.Status != StatusPaused {
+		return
+	}
+
+	g.PauseMenuIndex += delta
+	if g.PauseMenuIndex < 0 {
+		g.PauseMenuIndex = 0
+	} else if g.PauseMenuIndex > 1 {
+		g.PauseMenuIndex = 1
+	}
+}
+
+// ConfirmPauseMenu 确认暂停菜单选择
+func (g *Game) ConfirmPauseMenu() {
+	if g.Status != StatusPaused {
+		return
+	}
+
+	if g.PauseMenuIndex == 0 {
+		// 继续游戏
+		g.Resume()
+	} else {
+		// 结束游戏
+		g.finish(true)
+	}
+}
+
+// Abort 中止游戏
+func (g *Game) Abort() {
+	if g.Status == StatusRunning {
+		g.finish(true)
+	}
+}
+
+// finish 结束游戏
+func (g *Game) finish(aborted bool) {
+	g.Status = StatusFinished
+	g.Aborted = aborted
+	g.Stats.Finish()
+}
+
+// GetActiveWords 获取未完成的单词
+func (g *Game) GetActiveWords() []string {
+	words := make([]string, 0)
+	for _, w := range g.Words {
+		if !w.Completed {
+			words = append(words, w.Text)
+		}
+	}
+	return words
+}
+
+// GetMatchedIndices 获取匹配单词的索引
+func (g *Game) GetMatchedIndices() []int {
+	if g.InputBuffer == "" {
+		return nil
+	}
+
+	indices := make([]int, 0)
+	activeIdx := 0
+	for _, w := range g.Words {
+		if w.Completed {
+			continue
+		}
+
+		if strings.HasPrefix(w.Text, g.InputBuffer) {
+			indices = append(indices, activeIdx)
+		}
+		activeIdx++
+	}
+
+	return indices
+}
+
+// hasMatch 检查是否有匹配
+func (g *Game) hasMatch() bool {
+	if g.InputBuffer == "" {
+		return false
+	}
+
+	for _, w := range g.Words {
+		if !w.Completed && strings.HasPrefix(w.Text, g.InputBuffer) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isAllCompleted 检查是否全部完成
+func (g *Game) isAllCompleted() bool {
+	for _, w := range g.Words {
+		if !w.Completed {
+			return false
+		}
+	}
+	return true
+}
+
+// isValidWord 验证单词格式
+func isValidWord(word string) bool {
+	if len(word) == 0 {
+		return false
+	}
+
+	for _, ch := range word {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+			return false
+		}
+	}
+
+	return true
+}
