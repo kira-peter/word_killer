@@ -36,7 +36,6 @@ type Game struct {
 	Stats            *stats.Statistics
 	PauseMenuIndex   int // pause menu selected index (0=resume, 1=quit)
 	Aborted          bool
-	wordPool         []string // legacy single pool for backward compatibility
 	shortPool        []string
 	mediumPool       []string
 	longPool         []string
@@ -57,34 +56,6 @@ func New() *Game {
 		usedWords:      make(map[string]bool),
 		rng:            rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
-}
-
-// LoadWordDict loads word dictionary
-func (g *Game) LoadWordDict(path string) error {
-	file, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("failed to open word dictionary: %w", err)
-	}
-	defer file.Close()
-
-	g.wordPool = make([]string, 0)
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		word := strings.TrimSpace(scanner.Text())
-		if word != "" && isValidWord(word) {
-			g.wordPool = append(g.wordPool, word)
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("failed to read word dictionary: %w", err)
-	}
-
-	if len(g.wordPool) == 0 {
-		return fmt.Errorf("word dictionary is empty")
-	}
-
-	return nil
 }
 
 // LoadWordDictionaries loads multiple difficulty-based word dictionaries
@@ -162,11 +133,9 @@ func (g *Game) loadDictToPool(path string, pool *[]string) error {
 
 // Start starts the game
 func (g *Game) Start(wordCount int) error {
-	// Check if using multi-difficulty mode or legacy mode
-	hasMultiDifficulty := len(g.shortPool) > 0 || len(g.mediumPool) > 0 || len(g.longPool) > 0
-
-	if !hasMultiDifficulty && len(g.wordPool) == 0 {
-		return fmt.Errorf("word dictionary not loaded")
+	// Check if dictionaries are loaded
+	if len(g.shortPool) == 0 && len(g.mediumPool) == 0 && len(g.longPool) == 0 {
+		return fmt.Errorf("word dictionaries not loaded")
 	}
 
 	// Reset game state
@@ -177,40 +146,10 @@ func (g *Game) Start(wordCount int) error {
 	g.Stats.Start()
 	g.usedWords = make(map[string]bool)
 
-	// Generate game words
-	if hasMultiDifficulty {
-		g.Words = g.generateWordsFromMultiPools(wordCount)
-	} else {
-		g.Words = g.generateWords(wordCount)
-	}
+	// Generate game words from multi-pools
+	g.Words = g.generateWordsFromMultiPools(wordCount)
 
 	return nil
-}
-
-// generateWords 生成游戏单词
-func (g *Game) generateWords(count int) []Word {
-	// 如果词库数量不足，使用全部
-	if count <= 0 || count > len(g.wordPool) {
-		count = len(g.wordPool)
-	}
-
-	words := make([]Word, 0, count)
-	availableWords := make([]string, len(g.wordPool))
-	copy(availableWords, g.wordPool)
-
-	for i := 0; i < count && len(availableWords) > 0; i++ {
-		// 随机选择一个单词
-		idx := g.rng.Intn(len(availableWords))
-		word := availableWords[idx]
-
-		words = append(words, Word{Text: word, Completed: false})
-		g.usedWords[word] = true
-
-		// 移除已选单词
-		availableWords = append(availableWords[:idx], availableWords[idx+1:]...)
-	}
-
-	return words
 }
 
 // generateWordsFromMultiPools generates words from multiple difficulty pools based on ratios
