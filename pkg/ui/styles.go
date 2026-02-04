@@ -11,93 +11,93 @@ import (
 // Styles
 var (
 	titleStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("86")).
-		Bold(true)
+			Foreground(lipgloss.Color("86")).
+			Bold(true)
 
 	wordStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252"))
+			Foreground(lipgloss.Color("252"))
 
 	highlightStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("46")).
-		Bold(true)
+			Foreground(lipgloss.Color("46")).
+			Bold(true)
 
 	inputStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("226")).
-		Bold(true)
+			Foreground(lipgloss.Color("226")).
+			Bold(true)
 
 	statsStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("117"))
+			Foreground(lipgloss.Color("117"))
 
 	hintStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("205"))
+			Foreground(lipgloss.Color("205"))
 
 	menuSelectedStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("46")).
-		Bold(true)
+				Foreground(lipgloss.Color("46")).
+				Bold(true)
 
 	menuNormalStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252"))
+			Foreground(lipgloss.Color("252"))
 
 	// Completed word styles
 	completedWordStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Strikethrough(true)
+				Foreground(lipgloss.Color("240")).
+				Strikethrough(true)
 
 	// Hit effect style (bright flash)
 	hitEffectStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("226")). // Bright yellow
-		Bold(true).
-		Underline(true)
+			Foreground(lipgloss.Color("226")). // Bright yellow
+			Bold(true).
+			Underline(true)
 
 	// Fading styles (for gradual transition)
 	fadingStyle1 = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("46")). // Bright green
-		Bold(true)
+			Foreground(lipgloss.Color("46")). // Bright green
+			Bold(true)
 
 	fadingStyle2 = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("82")) // Medium green
+			Foreground(lipgloss.Color("82")) // Medium green
 
 	fadingStyle3 = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("244")) // Light gray
+			Foreground(lipgloss.Color("244")) // Light gray
 
 	fadingStyle4 = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("242")) // Medium gray
+			Foreground(lipgloss.Color("242")) // Medium gray
 
 	fadingStyle5 = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")) // Dark gray (final)
+			Foreground(lipgloss.Color("240")) // Dark gray (final)
 
 	// New styles for professional layout
 	headerStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("117")).
-		Background(lipgloss.Color("235")).
-		Padding(0, 2).
-		MarginBottom(1)
+			Foreground(lipgloss.Color("117")).
+			Background(lipgloss.Color("235")).
+			Padding(0, 2).
+			MarginBottom(1)
 
 	statItemStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252")).
-		Bold(false)
+			Foreground(lipgloss.Color("252")).
+			Bold(false)
 
 	statValueStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("46")).
-		Bold(true)
+			Foreground(lipgloss.Color("46")).
+			Bold(true)
 
 	inputBoxStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("86")).
-		Width(contentWidth).
-		Padding(0, 2).
-		MarginTop(1)
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("86")).
+			Width(contentWidth).
+			Padding(0, 2).
+			MarginTop(1)
 
 	wordBoxStyle = lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Width(contentWidth).
-		Padding(1, 2).
-		MarginTop(1).
-		MarginBottom(1)
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("240")).
+			Width(contentWidth).
+			Padding(1, 2).
+			MarginTop(1).
+			MarginBottom(1)
 
 	separatorStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
+			Foreground(lipgloss.Color("240"))
 )
 
 // Layout constants
@@ -419,7 +419,7 @@ func renderPauseArea(selectedIndex int, animFrame int) string {
 	lines = append(lines, "") // Empty line after box
 
 	// Menu options
-	options := []string{"▶  Resume Game", "⏹  Quit Game"}
+	options := []string{" Resume Game", " Quit Game"}
 	for i, opt := range options {
 		if i == selectedIndex {
 			lines = append(lines, "                           "+menuSelectedStyle.Render("> "+opt))
@@ -478,60 +478,50 @@ func RenderResults(stats GameStats, aborted bool) string {
 func renderResultsArea(stats GameStats, aborted bool) string {
 	var content strings.Builder
 
-	content.WriteString("\n")
-
 	// Title
 	if aborted {
-		content.WriteString("                    " + titleStyle.Render("GAME OVER") + "\n")
+		content.WriteString(fmt.Sprintf("%58s\n", titleStyle.Render("GAME OVER")))
 	} else {
-		content.WriteString("                 " + titleStyle.Render("CONGRATULATIONS!") + "\n")
+		content.WriteString(fmt.Sprintf("%70s\n", titleStyle.Render("CONGRATULATIONS")))
 	}
-	content.WriteString("\n")
-	content.WriteString("    " + separatorStyle.Render("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━") + "\n")
-	content.WriteString("\n")
+	content.WriteString("    " + separatorStyle.Render("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━") + "\n")
 
 	// Statistics section
-	content.WriteString("    " + highlightStyle.Render("Performance Metrics:") + "\n\n")
+	content.WriteString(fmt.Sprintf("%51s\n", titleStyle.Render("Performance Metrics:")))
 
 	// Keystroke stats
-	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+	content.WriteString(fmt.Sprintf("%50s %s\n",
 		statItemStyle.Render("Total Keystrokes:"),
-		statValueStyle.Render(fmt.Sprintf("%5d", stats.TotalKeystrokes))))
-	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+		statValueStyle.Render(fmt.Sprintf("%7d", stats.TotalKeystrokes))))
+	content.WriteString(fmt.Sprintf("%50s %s\n",
 		statItemStyle.Render("Valid Keystrokes:"),
-		statValueStyle.Render(fmt.Sprintf("%5d", stats.ValidKeystrokes))))
-	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+		statValueStyle.Render(fmt.Sprintf("%7d", stats.ValidKeystrokes))))
+	content.WriteString(fmt.Sprintf("%50s %s\n",
 		statItemStyle.Render("Correct Chars:"),
-		statValueStyle.Render(fmt.Sprintf("%5d", stats.CorrectChars))))
-
-	content.WriteString("\n")
+		statValueStyle.Render(fmt.Sprintf("%7d", stats.CorrectChars))))
 
 	// Word stats
-	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+	content.WriteString(fmt.Sprintf("%50s %s\n",
 		statItemStyle.Render("Completed Words:"),
-		statValueStyle.Render(fmt.Sprintf("%5d", stats.WordsCompleted))))
-	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+		statValueStyle.Render(fmt.Sprintf("%7d", stats.WordsCompleted))))
+	content.WriteString(fmt.Sprintf("%50s %s\n",
 		statItemStyle.Render("Total Letters:"),
-		statValueStyle.Render(fmt.Sprintf("%5d", stats.TotalLetters))))
-
-	content.WriteString("\n")
-	content.WriteString("    " + separatorStyle.Render("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━") + "\n")
-	content.WriteString("\n")
+		statValueStyle.Render(fmt.Sprintf("%7d", stats.TotalLetters))))
 
 	// Speed and accuracy (highlighted)
-	content.WriteString("    " + highlightStyle.Render("Speed & Accuracy:") + "\n\n")
-	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+	// Keystroke stats
+	content.WriteString(fmt.Sprintf("%50s %s\n",
 		statItemStyle.Render("Letters/second:"),
-		statValueStyle.Render(fmt.Sprintf("%6.2f", stats.LettersPerSecond))))
-	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+		statValueStyle.Render(fmt.Sprintf("%7.2f", stats.LettersPerSecond))))
+	content.WriteString(fmt.Sprintf("%50s %s\n",
 		statItemStyle.Render("Words/second:"),
-		statValueStyle.Render(fmt.Sprintf("%6.2f", stats.WordsPerSecond))))
-	content.WriteString("\n")
-	content.WriteString(fmt.Sprintf("        %-23s %s\n",
-		titleStyle.Render("Accuracy:"),
+		statValueStyle.Render(fmt.Sprintf("%7.2f", stats.WordsPerSecond))))
+	content.WriteString(fmt.Sprintf("%50s %s\n",
+		statItemStyle.Render("Correct Chars:"),
+		statValueStyle.Render(fmt.Sprintf("%7d", stats.CorrectChars))))
+	content.WriteString(fmt.Sprintf("%50s %s",
+		statItemStyle.Render("Accuracy:"),
 		statValueStyle.Render(fmt.Sprintf("%6.2f%%", stats.AccuracyPercent))))
-
-	content.WriteString("\n")
 
 	return wordBoxStyle.Render(content.String())
 }
