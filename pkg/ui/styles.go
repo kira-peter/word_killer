@@ -84,18 +84,26 @@ var (
 	inputBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("86")).
+			Width(contentWidth).
 			Padding(0, 2).
 			MarginTop(1)
 
 	wordBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
 			BorderForeground(lipgloss.Color("240")).
+			Width(contentWidth).
 			Padding(1, 2).
 			MarginTop(1).
 			MarginBottom(1)
 
 	separatorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240"))
+)
+
+// Layout constants
+const (
+	// Fixed width for all content areas to ensure alignment
+	contentWidth = 80
 )
 
 // GameStats game statistics
@@ -164,44 +172,42 @@ func RenderGame(words []WordInfo, highlightedIndices []int, input string, stats 
 
 // renderStatusBar renders the top status bar with statistics
 func renderStatusBar(stats GameStats, remainingWords int) string {
-	var items []string
+	// Format each stat with fixed width for alignment
+	timeStr := fmt.Sprintf("Time: %6.1fs", stats.ElapsedSeconds)
+	progressStr := fmt.Sprintf("Progress: %2d/%-2d", stats.WordsCompleted, stats.WordsCompleted+remainingWords)
+	speedStr := fmt.Sprintf("Speed: %5.1f l/s", stats.LettersPerSecond)
+	accuracyStr := fmt.Sprintf("Accuracy: %5.1f%%", stats.AccuracyPercent)
 
-	// Time
-	items = append(items, fmt.Sprintf("%s %s",
-		statItemStyle.Render("Time:"),
-		statValueStyle.Render(fmt.Sprintf("%.1fs", stats.ElapsedSeconds))))
+	// Build status line with fixed spacing
+	statusLine := fmt.Sprintf("%s  │  %s  │  %s  │  %s",
+		timeStr, progressStr, speedStr, accuracyStr)
 
-	// Progress
-	items = append(items, fmt.Sprintf("%s %s",
-		statItemStyle.Render("Progress:"),
-		statValueStyle.Render(fmt.Sprintf("%d/%d", stats.WordsCompleted, stats.WordsCompleted+remainingWords))))
-
-	// Speed
-	items = append(items, fmt.Sprintf("%s %s",
-		statItemStyle.Render("Speed:"),
-		statValueStyle.Render(fmt.Sprintf("%.1f l/s", stats.LettersPerSecond))))
-
-	// Accuracy
-	items = append(items, fmt.Sprintf("%s %s",
-		statItemStyle.Render("Accuracy:"),
-		statValueStyle.Render(fmt.Sprintf("%.1f%%", stats.AccuracyPercent))))
-
-	statusLine := strings.Join(items, "  │  ")
-	return headerStyle.Render(statusLine)
+	// Apply style and ensure fixed width
+	styled := headerStyle.Render(statusLine)
+	return lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Center).Render(styled)
 }
 
 // renderWordArea renders the middle word list area
 func renderWordArea(words []WordInfo, highlightedIndices []int, input string) string {
 	if len(words) == 0 {
-		return wordBoxStyle.Render(statsStyle.Render("All words completed! Press Enter to finish..."))
+		content := statsStyle.Render("All words completed!")
+		return wordBoxStyle.Render(content)
 	}
 
 	var wordLines []string
 	wordLines = append(wordLines, titleStyle.Render("Words:"))
 	wordLines = append(wordLines, "")
 
-	// Render words in columns for better space usage
-	const wordsPerRow = 3
+	// Calculate optimal columns based on content width
+	// Reserve space for padding and borders (about 8 chars)
+	availableWidth := contentWidth - 8
+	const wordColumnWidth = 18 // Each word gets 18 chars (word + spacing)
+	wordsPerRow := availableWidth / wordColumnWidth
+	if wordsPerRow < 1 {
+		wordsPerRow = 1
+	}
+
+	// Render words in columns
 	for i := 0; i < len(words); i += wordsPerRow {
 		var rowWords []string
 		for j := 0; j < wordsPerRow && i+j < len(words); j++ {
@@ -236,15 +242,25 @@ func renderWordArea(words []WordInfo, highlightedIndices []int, input string) st
 				renderedWord = wordStyle.Render(wordInfo.Text)
 			}
 
-			// Pad word to fixed width for alignment
-			renderedWord = fmt.Sprintf("%-20s", renderedWord)
-			rowWords = append(rowWords, renderedWord)
+			// Pad word to fixed width for alignment (use plain text length, not styled length)
+			paddedWord := padToWidth(wordInfo.Text, renderedWord, wordColumnWidth)
+			rowWords = append(rowWords, paddedWord)
 		}
-		wordLines = append(wordLines, "  "+strings.Join(rowWords, "  "))
+		wordLines = append(wordLines, "  "+strings.Join(rowWords, ""))
 	}
 
 	content := strings.Join(wordLines, "\n")
 	return wordBoxStyle.Render(content)
+}
+
+// padToWidth pads a styled string to a specific width based on the plain text length
+func padToWidth(plainText, styledText string, width int) string {
+	plainLen := len(plainText)
+	if plainLen >= width {
+		return styledText
+	}
+	padding := strings.Repeat(" ", width-plainLen)
+	return styledText + padding
 }
 
 // renderCompletedWordAnimation renders a completed word with hit effect and letter-by-letter fade
