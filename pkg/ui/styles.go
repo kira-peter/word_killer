@@ -131,15 +131,16 @@ func RenderWelcome() string {
 	var s string
 
 	s += "\n\n"
-	s += titleStyle.Render("    ╔════════════════════════════╗") + "\n"
-	s += titleStyle.Render("    ║                            ║") + "\n"
-	s += titleStyle.Render("    ║         Word Killer        ║") + "\n"
-	s += titleStyle.Render("    ║                            ║") + "\n"
-	s += titleStyle.Render("    ╚════════════════════════════╝") + "\n"
-	s += "\n"
-	s += statsStyle.Render("Low-key but never simple") + "\n\n"
-	s += highlightStyle.Render("Press [Enter] to start") + "\n"
-	s += hintStyle.Render("Press [ESC] to quit") + "\n\n"
+	s += titleStyle.Render("    ╔══════════════════════════════════════════════╗") + "\n"
+	s += titleStyle.Render("    ║                                              ║") + "\n"
+	s += titleStyle.Render("    ║                  Word Killer                 ║") + "\n"
+	s += titleStyle.Render("    ║                                              ║") + "\n"
+	s += titleStyle.Render("    ║") + statsStyle.Render("           Low-key but never simple           ") + titleStyle.Render("║") + "\n"
+	s += titleStyle.Render("    ║                                              ║") + "\n"
+	s += titleStyle.Render("    ║") + highlightStyle.Render("           Press [Enter] to start             ") + titleStyle.Render("║") + "\n"
+	s += titleStyle.Render("    ║") + hintStyle.Render("           Press [ESC]   to quit              ") + titleStyle.Render("║") + "\n"
+	s += titleStyle.Render("    ║                                              ║") + "\n"
+	s += titleStyle.Render("    ╚══════════════════════════════════════════════╝") + "\n"
 
 	return s
 }
