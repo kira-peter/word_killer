@@ -16,11 +16,12 @@ type tickMsg time.Time
 
 // model is the Bubble Tea model
 type model struct {
-	game   *game.Game
-	cfg    *config.Config
-	ready  bool
-	width  int
-	height int
+	game      *game.Game
+	cfg       *config.Config
+	ready     bool
+	width     int
+	height    int
+	animFrame int // animation frame counter for pause menu
 }
 
 func initialModel(cfg *config.Config, g *game.Game) model {
@@ -52,10 +53,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		// Only update display during game, not in menus
-		if m.ready && m.game.Status == game.StatusRunning {
-			return m, tickCmd()
-		}
+		// Increment animation frame
+		m.animFrame++
+		// Always return tick command to keep animation running
 		return m, tickCmd()
 	}
 
@@ -166,7 +166,20 @@ func (m model) View() string {
 
 		return ui.RenderGame(wordInfos, highlighted, m.game.InputBuffer, stats, len(activeWords))
 	} else if m.game.Status == game.StatusPaused {
-		return ui.RenderPauseMenu(m.game.PauseMenuIndex)
+		// Pass stats and animation frame to pause menu
+		activeWords := m.game.GetActiveWords()
+		stats := ui.GameStats{
+			TotalKeystrokes:   m.game.Stats.TotalKeystrokes,
+			ValidKeystrokes:   m.game.Stats.ValidKeystrokes,
+			CorrectChars:      m.game.Stats.CorrectChars,
+			WordsCompleted:    m.game.Stats.WordsCompleted,
+			TotalLetters:      m.game.Stats.TotalLetters,
+			ElapsedSeconds:    m.game.Stats.GetElapsedSeconds(),
+			LettersPerSecond:  m.game.Stats.GetLettersPerSecond(),
+			WordsPerSecond:    m.game.Stats.GetWordsPerSecond(),
+			AccuracyPercent:   m.game.Stats.GetAccuracyPercent(),
+		}
+		return ui.RenderPauseMenu(m.game.PauseMenuIndex, stats, len(activeWords), m.animFrame)
 	} else if m.game.Status == game.StatusFinished {
 		stats := ui.GameStats{
 			TotalKeystrokes:   m.game.Stats.TotalKeystrokes,

@@ -40,64 +40,64 @@ var (
 
 	// Completed word styles
 	completedWordStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("240")).
-				Strikethrough(true)
+		Foreground(lipgloss.Color("240")).
+		Strikethrough(true)
 
 	// Hit effect style (bright flash)
 	hitEffectStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("226")). // Bright yellow
-			Bold(true).
-			Underline(true)
+		Foreground(lipgloss.Color("226")). // Bright yellow
+		Bold(true).
+		Underline(true)
 
 	// Fading styles (for gradual transition)
 	fadingStyle1 = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("46")). // Bright green
-			Bold(true)
+		Foreground(lipgloss.Color("46")). // Bright green
+		Bold(true)
 
 	fadingStyle2 = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("82")) // Medium green
+		Foreground(lipgloss.Color("82")) // Medium green
 
 	fadingStyle3 = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("244")) // Light gray
+		Foreground(lipgloss.Color("244")) // Light gray
 
 	fadingStyle4 = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("242")) // Medium gray
+		Foreground(lipgloss.Color("242")) // Medium gray
 
 	fadingStyle5 = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")) // Dark gray (final)
+		Foreground(lipgloss.Color("240")) // Dark gray (final)
 
 	// New styles for professional layout
 	headerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("117")).
-			Background(lipgloss.Color("235")).
-			Padding(0, 2).
-			MarginBottom(1)
+		Foreground(lipgloss.Color("117")).
+		Background(lipgloss.Color("235")).
+		Padding(0, 2).
+		MarginBottom(1)
 
 	statItemStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("252")).
-			Bold(false)
+		Foreground(lipgloss.Color("252")).
+		Bold(false)
 
 	statValueStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("46")).
-			Bold(true)
+		Foreground(lipgloss.Color("46")).
+		Bold(true)
 
 	inputBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("86")).
-			Width(contentWidth).
-			Padding(0, 2).
-			MarginTop(1)
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("86")).
+		Width(contentWidth).
+		Padding(0, 2).
+		MarginTop(1)
 
 	wordBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("240")).
-			Width(contentWidth).
-			Padding(1, 2).
-			MarginTop(1).
-			MarginBottom(1)
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Width(contentWidth).
+		Padding(1, 2).
+		MarginTop(1).
+		MarginBottom(1)
 
 	separatorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240"))
+		Foreground(lipgloss.Color("240"))
 )
 
 // Layout constants
@@ -187,7 +187,7 @@ func renderStatusBar(stats GameStats, remainingWords int) string {
 	return lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Center).Render(styled)
 }
 
-// renderWordArea renders the middle word list area
+// renderWordArea renders the middle word list area with fixed height
 func renderWordArea(words []WordInfo, highlightedIndices []int, input string) string {
 	if len(words) == 0 {
 		content := statsStyle.Render("All words completed!")
@@ -198,20 +198,37 @@ func renderWordArea(words []WordInfo, highlightedIndices []int, input string) st
 	wordLines = append(wordLines, titleStyle.Render("Words:"))
 	wordLines = append(wordLines, "")
 
-	// Calculate optimal columns based on content width
-	// Reserve space for padding and borders (about 8 chars)
-	availableWidth := contentWidth - 8
+	// Fixed layout: 10 rows maximum
+	const maxRows = 10
 	const wordColumnWidth = 18 // Each word gets 18 chars (word + spacing)
+
+	// Calculate optimal columns based on content width
+	availableWidth := contentWidth - 8 // Reserve space for padding and borders
 	wordsPerRow := availableWidth / wordColumnWidth
 	if wordsPerRow < 1 {
 		wordsPerRow = 1
 	}
 
-	// Render words in columns
-	for i := 0; i < len(words); i += wordsPerRow {
+	// Calculate max words to display
+	maxWordsToDisplay := maxRows * wordsPerRow
+
+	// Render words in columns (up to maxWordsToDisplay)
+	displayCount := len(words)
+	if displayCount > maxWordsToDisplay {
+		displayCount = maxWordsToDisplay
+	}
+
+	rowCount := 0
+	for i := 0; i < displayCount; i += wordsPerRow {
 		var rowWords []string
-		for j := 0; j < wordsPerRow && i+j < len(words); j++ {
+		for j := 0; j < wordsPerRow; j++ {
 			idx := i + j
+			if idx >= displayCount {
+				// Fill empty cells with spaces
+				rowWords = append(rowWords, strings.Repeat(" ", wordColumnWidth))
+				continue
+			}
+
 			wordInfo := words[idx]
 
 			// Check if highlighted (only for active words)
@@ -242,11 +259,19 @@ func renderWordArea(words []WordInfo, highlightedIndices []int, input string) st
 				renderedWord = wordStyle.Render(wordInfo.Text)
 			}
 
-			// Pad word to fixed width for alignment (use plain text length, not styled length)
+			// Pad word to fixed width for alignment
 			paddedWord := padToWidth(wordInfo.Text, renderedWord, wordColumnWidth)
 			rowWords = append(rowWords, paddedWord)
 		}
 		wordLines = append(wordLines, "  "+strings.Join(rowWords, ""))
+		rowCount++
+	}
+
+	// Fill remaining rows with empty lines to maintain fixed height
+	for rowCount < maxRows {
+		emptyRow := "  " + strings.Repeat(" ", wordsPerRow*wordColumnWidth)
+		wordLines = append(wordLines, emptyRow)
+		rowCount++
 	}
 
 	content := strings.Join(wordLines, "\n")
@@ -282,7 +307,7 @@ func renderCompletedWordAnimation(wordInfo WordInfo) string {
 
 	// Phase 2: Letter-by-letter fade (150ms onwards)
 	// Each letter takes 80ms to fade through colors
-	const letterFadeTime = 80 // ms per letter
+	const letterFadeTime = 80  // ms per letter
 	const animationStart = 150 // when fade animation starts
 
 	var result strings.Builder
@@ -339,80 +364,174 @@ func renderInputArea(input string) string {
 	return inputBoxStyle.Render(content)
 }
 
-// RenderPauseMenu renders pause menu
-func RenderPauseMenu(selectedIndex int) string {
-	var s string
+// RenderPauseMenu renders pause menu with stats and animation
+func RenderPauseMenu(selectedIndex int, stats GameStats, remainingWords int, animFrame int) string {
+	var s strings.Builder
 
-	s += "\n\n"
-	s += titleStyle.Render("    ╔════════════════════╗") + "\n"
-	s += titleStyle.Render("    ║   Game Paused      ║") + "\n"
-	s += titleStyle.Render("    ╚════════════════════╝") + "\n"
-	s += "\n\n"
+	// === TOP: Status Bar (same as game screen) ===
+	statusBar := renderStatusBar(stats, remainingWords)
+	s.WriteString(statusBar)
+	s.WriteString("\n")
 
-	options := []string{"Resume", "Quit"}
+	// === MIDDLE: Pause Animation + Menu ===
+	pauseArea := renderPauseArea(selectedIndex, animFrame)
+	s.WriteString(pauseArea)
+	s.WriteString("\n")
+
+	// === BOTTOM: Hints ===
+	hints := inputBoxStyle.Render("[↑↓] Select  │  [Enter] Confirm  │  [ESC] Quit Game")
+	s.WriteString(hints)
+	s.WriteString("\n")
+
+	return s.String()
+}
+
+// renderPauseArea renders the pause menu area with scrolling animation and fixed height
+func renderPauseArea(selectedIndex int, animFrame int) string {
+	// Scrolling "GAME PAUSED" text
+	pauseText := "    GAME PAUSED    "
+	displayWidth := 20 // width inside the box
+	totalLength := len(pauseText) + displayWidth
+
+	// Simple scrolling: text moves from right to left
+	scrollOffset := animFrame % totalLength
+	extendedText := strings.Repeat(" ", displayWidth) + pauseText + strings.Repeat(" ", displayWidth)
+	startPos := scrollOffset
+	if startPos+displayWidth > len(extendedText) {
+		startPos = len(extendedText) - displayWidth
+	}
+	visibleText := extendedText[startPos : startPos+displayWidth]
+
+	// Fixed height: match word area (12 lines total)
+	lines := []string{}
+
+	// Title line
+	lines = append(lines, titleStyle.Render("Pause Menu:"))
+	lines = append(lines, "") // Empty line
+
+	// Scrolling text box (5 lines)
+	lines = append(lines, "                         "+titleStyle.Render("╔══════════════════════╗"))
+	lines = append(lines, "                         "+titleStyle.Render("║                      ║"))
+	lines = append(lines, "                         "+titleStyle.Render("║ ")+hintStyle.Render(visibleText)+titleStyle.Render(" ║"))
+	lines = append(lines, "                         "+titleStyle.Render("║                      ║"))
+	lines = append(lines, "                         "+titleStyle.Render("╚══════════════════════╝"))
+
+	lines = append(lines, "") // Empty line after box
+
+	// Menu options
+	options := []string{"▶  Resume Game", "⏹  Quit Game"}
 	for i, opt := range options {
 		if i == selectedIndex {
-			s += "    " + menuSelectedStyle.Render("> "+opt) + "\n"
+			lines = append(lines, "                           "+menuSelectedStyle.Render("> "+opt))
 		} else {
-			s += "      " + menuNormalStyle.Render(opt) + "\n"
+			lines = append(lines, "                             "+menuNormalStyle.Render(opt))
 		}
 	}
 
-	s += "\n" + hintStyle.Render("[↑↓] Select | [Enter] Confirm | [ESC] Quit Game") + "\n"
+	// Fill to exactly 12 lines (title + empty + 10 content rows)
+	// Current: 1 title + 1 empty + 5 box + 1 empty + 2 menu = 10 lines
+	// Need 2 more lines
+	for len(lines) < 12 {
+		lines = append(lines, "")
+	}
 
-	return s
+	return wordBoxStyle.Render(strings.Join(lines, "\n"))
 }
 
-// RenderResults renders game results
-func RenderResults(stats GameStats, aborted bool) string {
-	var s string
-
-	s += "\n\n"
-	s += titleStyle.Render("    ╔═══════════════════════╗") + "\n"
-	if aborted {
-		s += titleStyle.Render("    ║     Game Over         ║") + "\n"
-	} else {
-		s += titleStyle.Render("    ║   Congratulations!    ║") + "\n"
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
 	}
-	s += titleStyle.Render("    ╚═══════════════════════╝") + "\n"
-	s += "\n\n"
+	return b
+}
 
-	s += statsStyle.Render("=== Final Statistics ===") + "\n\n"
+// RenderResults renders game results with consistent layout
+func RenderResults(stats GameStats, aborted bool) string {
+	var s strings.Builder
 
-	// Main stats
-	s += fmt.Sprintf("%s %s\n",
-		statItemStyle.Render("Total Keystrokes:  "),
-		statValueStyle.Render(fmt.Sprintf("%d", stats.TotalKeystrokes)))
-	s += fmt.Sprintf("%s %s\n",
-		statItemStyle.Render("Valid Keystrokes:  "),
-		statValueStyle.Render(fmt.Sprintf("%d", stats.ValidKeystrokes)))
-	s += fmt.Sprintf("%s %s\n",
-		statItemStyle.Render("Correct Chars:     "),
-		statValueStyle.Render(fmt.Sprintf("%d", stats.CorrectChars)))
-	s += fmt.Sprintf("%s %s\n",
-		statItemStyle.Render("Completed Words:   "),
-		statValueStyle.Render(fmt.Sprintf("%d", stats.WordsCompleted)))
-	s += fmt.Sprintf("%s %s\n",
-		statItemStyle.Render("Total Letters:     "),
-		statValueStyle.Render(fmt.Sprintf("%d", stats.TotalLetters)))
-	s += fmt.Sprintf("%s %s\n",
-		statItemStyle.Render("Total Time:        "),
-		statValueStyle.Render(fmt.Sprintf("%.2f seconds", stats.ElapsedSeconds)))
+	// === TOP: Header ===
+	var header string
+	if aborted {
+		header = "Time:   " + fmt.Sprintf("%6.1fs", stats.ElapsedSeconds) + "  │  Status: Game Over"
+	} else {
+		header = "Time:   " + fmt.Sprintf("%6.1fs", stats.ElapsedSeconds) + "  │  Status: Completed! 🎉"
+	}
+	headerStyled := headerStyle.Render(header)
+	s.WriteString(lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Center).Render(headerStyled))
+	s.WriteString("\n")
 
-	s += "\n"
-	s += highlightStyle.Render("Performance:") + "\n"
-	s += fmt.Sprintf("%s %s\n",
-		statItemStyle.Render("Letters/second:    "),
-		statValueStyle.Render(fmt.Sprintf("%.2f", stats.LettersPerSecond)))
-	s += fmt.Sprintf("%s %s\n",
-		statItemStyle.Render("Words/second:      "),
-		statValueStyle.Render(fmt.Sprintf("%.2f", stats.WordsPerSecond)))
-	s += "\n"
-	s += fmt.Sprintf("%s %s\n",
-		highlightStyle.Render("Accuracy:          "),
-		statValueStyle.Render(fmt.Sprintf("%.2f%%", stats.AccuracyPercent)))
+	// === MIDDLE: Statistics Area ===
+	statsArea := renderResultsArea(stats, aborted)
+	s.WriteString(statsArea)
+	s.WriteString("\n")
 
-	s += "\n" + hintStyle.Render("Press any key to exit...") + "\n"
+	// === BOTTOM: Exit Hint ===
+	hints := inputBoxStyle.Render("Press any key to exit...")
+	s.WriteString(hints)
+	s.WriteString("\n")
 
-	return s
+	return s.String()
+}
+
+// renderResultsArea renders the statistics area
+func renderResultsArea(stats GameStats, aborted bool) string {
+	var content strings.Builder
+
+	content.WriteString("\n")
+
+	// Title
+	if aborted {
+		content.WriteString("                    " + titleStyle.Render("GAME OVER") + "\n")
+	} else {
+		content.WriteString("                 " + titleStyle.Render("CONGRATULATIONS!") + "\n")
+	}
+	content.WriteString("\n")
+	content.WriteString("    " + separatorStyle.Render("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━") + "\n")
+	content.WriteString("\n")
+
+	// Statistics section
+	content.WriteString("    " + highlightStyle.Render("Performance Metrics:") + "\n\n")
+
+	// Keystroke stats
+	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+		statItemStyle.Render("Total Keystrokes:"),
+		statValueStyle.Render(fmt.Sprintf("%5d", stats.TotalKeystrokes))))
+	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+		statItemStyle.Render("Valid Keystrokes:"),
+		statValueStyle.Render(fmt.Sprintf("%5d", stats.ValidKeystrokes))))
+	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+		statItemStyle.Render("Correct Chars:"),
+		statValueStyle.Render(fmt.Sprintf("%5d", stats.CorrectChars))))
+
+	content.WriteString("\n")
+
+	// Word stats
+	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+		statItemStyle.Render("Completed Words:"),
+		statValueStyle.Render(fmt.Sprintf("%5d", stats.WordsCompleted))))
+	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+		statItemStyle.Render("Total Letters:"),
+		statValueStyle.Render(fmt.Sprintf("%5d", stats.TotalLetters))))
+
+	content.WriteString("\n")
+	content.WriteString("    " + separatorStyle.Render("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━") + "\n")
+	content.WriteString("\n")
+
+	// Speed and accuracy (highlighted)
+	content.WriteString("    " + highlightStyle.Render("Speed & Accuracy:") + "\n\n")
+	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+		statItemStyle.Render("Letters/second:"),
+		statValueStyle.Render(fmt.Sprintf("%6.2f", stats.LettersPerSecond))))
+	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+		statItemStyle.Render("Words/second:"),
+		statValueStyle.Render(fmt.Sprintf("%6.2f", stats.WordsPerSecond))))
+	content.WriteString("\n")
+	content.WriteString(fmt.Sprintf("        %-23s %s\n",
+		titleStyle.Render("Accuracy:"),
+		statValueStyle.Render(fmt.Sprintf("%6.2f%%", stats.AccuracyPercent))))
+
+	content.WriteString("\n")
+
+	return wordBoxStyle.Render(content.String())
 }
