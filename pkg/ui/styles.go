@@ -43,10 +43,28 @@ var (
 				Foreground(lipgloss.Color("240")).
 				Strikethrough(true)
 
-	animatingWordStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("46")).
-				Bold(true).
-				Blink(true)
+	// Hit effect style (bright flash)
+	hitEffectStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("226")). // Bright yellow
+			Bold(true).
+			Underline(true)
+
+	// Fading styles (for gradual transition)
+	fadingStyle1 = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("46")). // Bright green
+			Bold(true)
+
+	fadingStyle2 = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("82")) // Medium green
+
+	fadingStyle3 = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("244")) // Light gray
+
+	fadingStyle4 = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("242")) // Medium gray
+
+	fadingStyle5 = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")) // Dark gray (final)
 
 	// New styles for professional layout
 	headerStyle = lipgloss.NewStyle().
@@ -203,23 +221,9 @@ func renderWordArea(words []WordInfo, highlightedIndices []int, input string) st
 
 			var renderedWord string
 
-			// Check if word is in animation (just completed, within 0.5s)
+			// Render completed word with animation
 			if wordInfo.Completed {
-				timeSinceCompletion := time.Since(wordInfo.CompletedAt)
-				if timeSinceCompletion < 500*time.Millisecond {
-					// Animation phase: blink effect
-					blinkCycle := int(timeSinceCompletion.Milliseconds() / 100)
-					if blinkCycle%2 == 0 {
-						// Bright green flash
-						renderedWord = animatingWordStyle.Render(wordInfo.Text)
-					} else {
-						// Dark gray flash
-						renderedWord = completedWordStyle.Render(wordInfo.Text)
-					}
-				} else {
-					// Animation done, show as completed (gray with strikethrough)
-					renderedWord = completedWordStyle.Render(wordInfo.Text)
-				}
+				renderedWord = renderCompletedWordAnimation(wordInfo)
 			} else if isHighlighted && len(input) > 0 {
 				// Highlight matched part for active words
 				matchLen := len(input)
@@ -241,6 +245,69 @@ func renderWordArea(words []WordInfo, highlightedIndices []int, input string) st
 
 	content := strings.Join(wordLines, "\n")
 	return wordBoxStyle.Render(content)
+}
+
+// renderCompletedWordAnimation renders a completed word with hit effect and letter-by-letter fade
+func renderCompletedWordAnimation(wordInfo WordInfo) string {
+	timeSinceCompletion := time.Since(wordInfo.CompletedAt)
+	msElapsed := timeSinceCompletion.Milliseconds()
+
+	// Phase 1: Hit effect (0-150ms) - Bright flash
+	if msElapsed < 150 {
+		// Alternate between bright yellow and bright green for impact
+		if msElapsed < 50 {
+			return hitEffectStyle.Render(wordInfo.Text)
+		} else if msElapsed < 100 {
+			return fadingStyle1.Render(wordInfo.Text)
+		} else {
+			return hitEffectStyle.Render(wordInfo.Text)
+		}
+	}
+
+	// Phase 2: Letter-by-letter fade (150ms onwards)
+	// Each letter takes 80ms to fade through colors
+	const letterFadeTime = 80 // ms per letter
+	const animationStart = 150 // when fade animation starts
+
+	var result strings.Builder
+	wordLen := len(wordInfo.Text)
+
+	for i, ch := range wordInfo.Text {
+		letterStartTime := animationStart + int64(i*letterFadeTime)
+		letterElapsed := msElapsed - letterStartTime
+
+		var charStyle lipgloss.Style
+
+		if letterElapsed < 0 {
+			// Letter hasn't started fading yet - still bright green
+			charStyle = fadingStyle1
+		} else if letterElapsed < 20 {
+			// Stage 1: Bright green
+			charStyle = fadingStyle1
+		} else if letterElapsed < 40 {
+			// Stage 2: Medium green
+			charStyle = fadingStyle2
+		} else if letterElapsed < 60 {
+			// Stage 3: Light gray
+			charStyle = fadingStyle3
+		} else if letterElapsed < 80 {
+			// Stage 4: Medium gray
+			charStyle = fadingStyle4
+		} else {
+			// Stage 5: Dark gray (final)
+			charStyle = fadingStyle5
+		}
+
+		result.WriteString(charStyle.Render(string(ch)))
+	}
+
+	// Add strikethrough after complete fade (all letters + fade time)
+	totalAnimTime := animationStart + int64(wordLen*letterFadeTime) + 80
+	if msElapsed >= totalAnimTime {
+		return completedWordStyle.Render(wordInfo.Text)
+	}
+
+	return result.String()
 }
 
 // renderInputArea renders the bottom input area
