@@ -8,8 +8,6 @@ import (
 
 // Config game configuration
 type Config struct {
-	// WordDictPath word dictionary file path (legacy, for backward compatibility)
-	WordDictPath string `json:"word_dict_path"`
 	// WordCount number of words per game (0 means unlimited)
 	WordCount int `json:"word_count"`
 
@@ -27,7 +25,6 @@ type Config struct {
 // DefaultConfig returns default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		WordDictPath:   "data/words.txt",
 		WordCount:      20, // default 20 words
 		ShortDictPath:  "data/google-10000-short.txt",
 		MediumDictPath: "data/google-10000-medium.txt",
