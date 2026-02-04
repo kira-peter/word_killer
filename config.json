@@ -1,4 +1,10 @@
 {
   "word_dict_path": "data/words.txt",
-  "word_count": 20
+  "word_count": 20,
+  "short_dict_path": "data/google-10000-short.txt",
+  "medium_dict_path": "data/google-10000-medium.txt",
+  "long_dict_path": "data/google-10000-long.txt",
+  "short_ratio": 30,
+  "medium_ratio": 50,
+  "long_ratio": 20
 }

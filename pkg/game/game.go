@@ -36,9 +36,16 @@ type Game struct {
 	Stats            *stats.Statistics
 	PauseMenuIndex   int // pause menu selected index (0=resume, 1=quit)
 	Aborted          bool
-	wordPool         []string
+	wordPool         []string // legacy single pool for backward compatibility
+	shortPool        []string
+	mediumPool       []string
+	longPool         []string
 	usedWords        map[string]bool
 	rng              *rand.Rand
+	// Normalized difficulty ratios (0-1 range)
+	shortRatio       float64
+	mediumRatio      float64
+	longRatio        float64
 }
 
 // New creates a new game instance
@@ -80,9 +87,85 @@ func (g *Game) LoadWordDict(path string) error {
 	return nil
 }
 
+// LoadWordDictionaries loads multiple difficulty-based word dictionaries
+func (g *Game) LoadWordDictionaries(shortPath, mediumPath, longPath string, shortRatio, mediumRatio, longRatio float64) error {
+	var hasError bool
+	errorMsg := ""
+
+	// Load short dictionary
+	if shortPath != "" && shortRatio > 0 {
+		if err := g.loadDictToPool(shortPath, &g.shortPool); err != nil {
+			errorMsg += fmt.Sprintf("short dictionary: %v; ", err)
+			hasError = true
+		}
+	}
+
+	// Load medium dictionary
+	if mediumPath != "" && mediumRatio > 0 {
+		if err := g.loadDictToPool(mediumPath, &g.mediumPool); err != nil {
+			errorMsg += fmt.Sprintf("medium dictionary: %v; ", err)
+			hasError = true
+		}
+	}
+
+	// Load long dictionary
+	if longPath != "" && longRatio > 0 {
+		if err := g.loadDictToPool(longPath, &g.longPool); err != nil {
+			errorMsg += fmt.Sprintf("long dictionary: %v; ", err)
+			hasError = true
+		}
+	}
+
+	// Check if at least one pool is loaded
+	if len(g.shortPool) == 0 && len(g.mediumPool) == 0 && len(g.longPool) == 0 {
+		if hasError {
+			return fmt.Errorf("failed to load any word dictionary: %s", errorMsg)
+		}
+		return fmt.Errorf("all word dictionaries are empty")
+	}
+
+	// Store normalized ratios
+	g.shortRatio = shortRatio
+	g.mediumRatio = mediumRatio
+	g.longRatio = longRatio
+
+	return nil
+}
+
+// loadDictToPool loads a dictionary file into a word pool
+func (g *Game) loadDictToPool(path string, pool *[]string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("failed to open: %w", err)
+	}
+	defer file.Close()
+
+	*pool = make([]string, 0)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		word := strings.TrimSpace(scanner.Text())
+		if word != "" && isValidWord(word) {
+			*pool = append(*pool, word)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("failed to read: %w", err)
+	}
+
+	if len(*pool) == 0 {
+		return fmt.Errorf("dictionary is empty")
+	}
+
+	return nil
+}
+
 // Start starts the game
 func (g *Game) Start(wordCount int) error {
-	if len(g.wordPool) == 0 {
+	// Check if using multi-difficulty mode or legacy mode
+	hasMultiDifficulty := len(g.shortPool) > 0 || len(g.mediumPool) > 0 || len(g.longPool) > 0
+
+	if !hasMultiDifficulty && len(g.wordPool) == 0 {
 		return fmt.Errorf("word dictionary not loaded")
 	}
 
@@ -95,7 +178,11 @@ func (g *Game) Start(wordCount int) error {
 	g.usedWords = make(map[string]bool)
 
 	// Generate game words
-	g.Words = g.generateWords(wordCount)
+	if hasMultiDifficulty {
+		g.Words = g.generateWordsFromMultiPools(wordCount)
+	} else {
+		g.Words = g.generateWords(wordCount)
+	}
 
 	return nil
 }
@@ -121,6 +208,106 @@ func (g *Game) generateWords(count int) []Word {
 
 		// 移除已选单词
 		availableWords = append(availableWords[:idx], availableWords[idx+1:]...)
+	}
+
+	return words
+}
+
+// generateWordsFromMultiPools generates words from multiple difficulty pools based on ratios
+func (g *Game) generateWordsFromMultiPools(count int) []Word {
+	if count <= 0 {
+		count = 20 // default count
+	}
+
+	// Calculate target counts for each difficulty
+	shortCount := int(float64(count) * g.shortRatio)
+	mediumCount := int(float64(count) * g.mediumRatio)
+	longCount := int(float64(count) * g.longRatio)
+
+	// Adjust for rounding errors to ensure total equals count
+	total := shortCount + mediumCount + longCount
+	if total < count {
+		// Add remaining to the pool with highest ratio
+		diff := count - total
+		if g.mediumRatio >= g.shortRatio && g.mediumRatio >= g.longRatio {
+			mediumCount += diff
+		} else if g.shortRatio >= g.longRatio {
+			shortCount += diff
+		} else {
+			longCount += diff
+		}
+	}
+
+	words := make([]Word, 0, count)
+
+	// Select words from each pool
+	words = append(words, g.selectWordsFromPool(g.shortPool, shortCount)...)
+	words = append(words, g.selectWordsFromPool(g.mediumPool, mediumCount)...)
+	words = append(words, g.selectWordsFromPool(g.longPool, longCount)...)
+
+	// If we don't have enough words, try to fill from other pools
+	if len(words) < count {
+		needed := count - len(words)
+		allPools := make([]string, 0)
+		allPools = append(allPools, g.shortPool...)
+		allPools = append(allPools, g.mediumPool...)
+		allPools = append(allPools, g.longPool...)
+
+		// Filter out already used words
+		available := make([]string, 0)
+		for _, w := range allPools {
+			if !g.usedWords[w] {
+				available = append(available, w)
+			}
+		}
+
+		words = append(words, g.selectWordsFromPool(available, needed)...)
+	}
+
+	// Shuffle the words to mix difficulties
+	for i := len(words) - 1; i > 0; i-- {
+		j := g.rng.Intn(i + 1)
+		words[i], words[j] = words[j], words[i]
+	}
+
+	return words
+}
+
+// selectWordsFromPool selects random words from a pool without repetition
+func (g *Game) selectWordsFromPool(pool []string, count int) []Word {
+	if count <= 0 || len(pool) == 0 {
+		return nil
+	}
+
+	// Limit count to available words
+	if count > len(pool) {
+		count = len(pool)
+	}
+
+	// Create a copy of available words (excluding already used)
+	available := make([]string, 0)
+	for _, w := range pool {
+		if !g.usedWords[w] {
+			available = append(available, w)
+		}
+	}
+
+	// Adjust count if not enough available words
+	if count > len(available) {
+		count = len(available)
+	}
+
+	words := make([]Word, 0, count)
+	for i := 0; i < count && len(available) > 0; i++ {
+		// Randomly select a word
+		idx := g.rng.Intn(len(available))
+		word := available[idx]
+
+		words = append(words, Word{Text: word, Completed: false})
+		g.usedWords[word] = true
+
+		// Remove selected word from available list
+		available = append(available[:idx], available[idx+1:]...)
 	}
 
 	return words

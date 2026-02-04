@@ -210,9 +210,23 @@ func main() {
 	// Create game instance
 	g := game.New()
 
-	// Load word dictionary
-	if err := g.LoadWordDict(cfg.WordDictPath); err != nil {
-		fmt.Printf("Failed to load word dictionary: %v\n", err)
+	// Normalize difficulty ratios
+	shortRatio, mediumRatio, longRatio, err := cfg.NormalizeRatios()
+	if err != nil {
+		fmt.Printf("Invalid difficulty ratios: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Load word dictionaries
+	if err := g.LoadWordDictionaries(
+		cfg.ShortDictPath,
+		cfg.MediumDictPath,
+		cfg.LongDictPath,
+		shortRatio,
+		mediumRatio,
+		longRatio,
+	); err != nil {
+		fmt.Printf("Failed to load word dictionaries: %v\n", err)
 		os.Exit(1)
 	}
 
