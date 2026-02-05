@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -11,93 +12,93 @@ import (
 // Styles
 var (
 	titleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("86")).
-			Bold(true)
+		Foreground(lipgloss.Color("86")).
+		Bold(true)
 
 	wordStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("252"))
+		Foreground(lipgloss.Color("252"))
 
 	highlightStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("46")).
-			Bold(true)
+		Foreground(lipgloss.Color("46")).
+		Bold(true)
 
 	inputStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("226")).
-			Bold(true)
+		Foreground(lipgloss.Color("226")).
+		Bold(true)
 
 	statsStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("117"))
+		Foreground(lipgloss.Color("117"))
 
 	hintStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("205"))
+		Foreground(lipgloss.Color("205"))
 
 	menuSelectedStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("46")).
-				Bold(true)
+		Foreground(lipgloss.Color("46")).
+		Bold(true)
 
 	menuNormalStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("252"))
+		Foreground(lipgloss.Color("252"))
 
 	// Completed word styles
 	completedWordStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("240")).
-				Strikethrough(true)
+		Foreground(lipgloss.Color("240")).
+		Strikethrough(true)
 
 	// Hit effect style (bright flash)
 	hitEffectStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("226")). // Bright yellow
-			Bold(true).
-			Underline(true)
+		Foreground(lipgloss.Color("226")). // Bright yellow
+		Bold(true).
+		Underline(true)
 
 	// Fading styles (for gradual transition)
 	fadingStyle1 = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("46")). // Bright green
-			Bold(true)
+		Foreground(lipgloss.Color("46")). // Bright green
+		Bold(true)
 
 	fadingStyle2 = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("82")) // Medium green
+		Foreground(lipgloss.Color("82")) // Medium green
 
 	fadingStyle3 = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("244")) // Light gray
+		Foreground(lipgloss.Color("244")) // Light gray
 
 	fadingStyle4 = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("242")) // Medium gray
+		Foreground(lipgloss.Color("242")) // Medium gray
 
 	fadingStyle5 = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")) // Dark gray (final)
+		Foreground(lipgloss.Color("240")) // Dark gray (final)
 
 	// New styles for professional layout
 	headerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("117")).
-			Background(lipgloss.Color("235")).
-			Padding(0, 2).
-			MarginBottom(1)
+		Foreground(lipgloss.Color("117")).
+		Background(lipgloss.Color("235")).
+		Padding(0, 2).
+		MarginBottom(1)
 
 	statItemStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("252")).
-			Bold(false)
+		Foreground(lipgloss.Color("252")).
+		Bold(false)
 
 	statValueStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("46")).
-			Bold(true)
+		Foreground(lipgloss.Color("46")).
+		Bold(true)
 
 	inputBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("86")).
-			Width(contentWidth).
-			Padding(0, 2).
-			MarginTop(1)
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("86")).
+		Width(contentWidth).
+		Padding(0, 2).
+		MarginTop(1)
 
 	wordBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("240")).
-			Width(contentWidth).
-			Padding(1, 2).
-			MarginTop(1).
-			MarginBottom(1)
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Width(contentWidth).
+		Padding(1, 2).
+		MarginTop(1).
+		MarginBottom(1)
 
 	separatorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240"))
+		Foreground(lipgloss.Color("240"))
 )
 
 // Layout constants
@@ -126,23 +127,108 @@ type WordInfo struct {
 	CompletedAt time.Time
 }
 
-// RenderWelcome renders welcome screen
-func RenderWelcome() string {
-	var s string
+// WelcomeAnimationState tracks the welcome screen animation state
+type WelcomeAnimationState struct {
+	Frame              int
+	BulletActive       bool        // whether a bullet is currently flying
+	BulletX            int         // bullet column position (0-45 for internal width)
+	BulletY            int         // bullet row position (0=title row, 1=empty1, 2=empty2, 3=tagline)
+	Exploding          bool        // whether tagline is exploding
+	ExplosionTime      time.Time   // when explosion started (for renderCompletedWordAnimation logic)
+	TaglineWord        TaglineInfo // tagline word info for explosion animation
+	ExplosionTriggered bool        // whether explosion was triggered (to prevent re-triggering)
+	SelectedOption     int         // 0 for start, 1 for quit
+}
 
-	s += "\n\n"
-	s += titleStyle.Render("    ╔══════════════════════════════════════════════╗") + "\n"
-	s += titleStyle.Render("    ║                                              ║") + "\n"
-	s += titleStyle.Render("    ║                  Word Killer                 ║") + "\n"
-	s += titleStyle.Render("    ║                                              ║") + "\n"
-	s += titleStyle.Render("    ║") + statsStyle.Render("           Low-key but never simple           ") + titleStyle.Render("║") + "\n"
-	s += titleStyle.Render("    ║                                              ║") + "\n"
-	s += titleStyle.Render("    ║") + highlightStyle.Render("           Press [Enter] to start             ") + titleStyle.Render("║") + "\n"
-	s += titleStyle.Render("    ║") + hintStyle.Render("           Press [ESC]   to quit              ") + titleStyle.Render("║") + "\n"
-	s += titleStyle.Render("    ║                                              ║") + "\n"
-	s += titleStyle.Render("    ╚══════════════════════════════════════════════╝") + "\n"
+// TaglineInfo contains tagline display information for explosion animation
+type TaglineInfo struct {
+	Text        string
+	Completed   bool
+	CompletedAt time.Time
+}
 
-	return s
+// RenderWelcome renders welcome screen with bullet animation
+func RenderWelcome(state *WelcomeAnimationState) string {
+	var s strings.Builder
+
+	// Both Word and Killer use the same red pulsing effect
+	wordText := renderPulsingKiller("Word", state.Frame)
+	killerText := renderPulsingKiller("Killer", state.Frame)
+
+	s.WriteString("\n\n")
+	s.WriteString(titleStyle.Render("    ╔══════════════════════════════════════════════╗") + "\n")
+	s.WriteString(titleStyle.Render("    ║                                              ║") + "\n")
+
+	// Title row (row 0)
+	titleRow := renderTitleRow(wordText, killerText, state, 0)
+	s.WriteString(titleRow)
+
+	// Empty row (row 1) - only one empty row after title
+	emptyRow1 := renderEmptyRow(state, 1)
+	s.WriteString(emptyRow1)
+
+	// Tagline row (row 2) - explosion happens here (moved from row 3)
+	taglineRow := renderTaglineRow(state)
+	s.WriteString(taglineRow)
+
+	s.WriteString(titleStyle.Render("    ║                                              ║") + "\n")
+
+	// Options row 1: start
+	optionRow1 := renderOptionLine(state, 0)
+	s.WriteString(optionRow1)
+
+	// Options row 2: quit
+	optionRow2 := renderOptionLine(state, 1)
+	s.WriteString(optionRow2)
+
+	// Empty row after quit
+	s.WriteString(titleStyle.Render("    ║                                              ║") + "\n")
+
+	s.WriteString(titleStyle.Render("    ╚══════════════════════════════════════════════╝") + "\n")
+
+	return s.String()
+}
+
+// renderOptionsRow renders the options row with selection
+func renderOptionsRow(state *WelcomeAnimationState) string {
+	// No longer used - replaced by renderOptionLine
+	return ""
+}
+
+// renderOptionLine renders a single option line
+func renderOptionLine(state *WelcomeAnimationState, optionIndex int) string {
+	const boxWidth = 46
+
+	options := []string{"start", "quit"}
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("226")). // Bright yellow
+		Bold(true)
+	normalStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("252"))
+
+	// Build the option text with indicator
+	var optionDisplay string
+	if state.SelectedOption == optionIndex {
+		optionDisplay = "> " + options[optionIndex] + " <"
+	} else {
+		optionDisplay = "  " + options[optionIndex] + "  "
+	}
+
+	// Apply style
+	var styledText string
+	if state.SelectedOption == optionIndex {
+		styledText = selectedStyle.Render(optionDisplay)
+	} else {
+		styledText = normalStyle.Render(optionDisplay)
+	}
+
+	// Use lipgloss to center the text within the box
+	alignedText := lipgloss.NewStyle().
+		Width(boxWidth).
+		Align(lipgloss.Center).
+		Render(styledText)
+
+	return titleStyle.Render("    ║") + alignedText + titleStyle.Render("║") + "\n"
 }
 
 // RenderGame renders game screen with professional layout
@@ -525,4 +611,329 @@ func renderResultsArea(stats GameStats, aborted bool) string {
 		statValueStyle.Render(fmt.Sprintf("%6.2f%%", stats.AccuracyPercent))))
 
 	return wordBoxStyle.Render(content.String())
+}
+
+// renderTitleRow renders the title row with bullet if present
+func renderTitleRow(wordText, killerText string, state *WelcomeAnimationState, row int) string {
+	// Internal box width is 46 characters
+	const boxWidth = 46
+
+	// Combine Word + space + Killer
+	titleText := wordText + " " + killerText
+
+	// Use lipgloss to center the text within the box
+	// lipgloss handles ANSI codes correctly
+	centeredText := lipgloss.NewStyle().
+		Width(boxWidth).
+		Align(lipgloss.Center).
+		Render(titleText)
+
+	return titleStyle.Render("    ║") + centeredText + titleStyle.Render("║") + "\n"
+}
+
+// renderEmptyRow renders an empty row with bullet if present
+func renderEmptyRow(state *WelcomeAnimationState, row int) string {
+	const boxWidth = 46
+
+	// Empty content (all spaces)
+	contentStr := strings.Repeat(" ", boxWidth)
+
+	// Check if bullet is on this row
+	if state.BulletActive && state.BulletY == row {
+		// Add bullet at current position
+		bulletChar := renderBullet()
+		bulletPos := state.BulletX
+		// Ensure bullet position is within bounds
+		if bulletPos >= 0 && bulletPos < boxWidth && bulletPos < len(contentStr) {
+			// Replace character at bullet position with bullet
+			contentStr = contentStr[:bulletPos] + bulletChar + contentStr[bulletPos+1:]
+		}
+	}
+
+	return titleStyle.Render("    ║") + contentStr + titleStyle.Render("║") + "\n"
+}
+
+// renderTaglineRow renders the tagline row with explosion effect
+func renderTaglineRow(state *WelcomeAnimationState) string {
+	const boxWidth = 46
+	taglineText := "Low-key but never simple"
+
+	// Calculate tagline position (centered in the box)
+	taglineLen := len(taglineText)
+	taglineStartPadding := (boxWidth - taglineLen) / 2
+	rightPadding := boxWidth - taglineLen - taglineStartPadding
+
+	// Check if bullet is at row 2 (tagline row) and at tagline text position
+	if state.BulletActive && state.BulletY == 2 && !state.ExplosionTriggered {
+		// Check if bullet position intersects with tagline text
+		if state.BulletX >= taglineStartPadding && state.BulletX < taglineStartPadding+taglineLen {
+			// Trigger explosion when bullet reaches tagline text
+			state.BulletActive = false
+			state.Exploding = true
+			state.ExplosionTime = time.Now()
+			state.TaglineWord = TaglineInfo{
+				Text:        taglineText,
+				Completed:   true,
+				CompletedAt: state.ExplosionTime,
+			}
+			state.ExplosionTriggered = true
+		}
+	}
+
+	// Render tagline text with explosion effect if exploding
+	var contentStr string
+	if state.Exploding {
+		// Use renderCompletedWordAnimation logic for explosion
+		explosionText := renderTaglineExplosion(state.TaglineWord)
+		// Pad the explosion text to maintain box width
+		leftPadding := strings.Repeat(" ", taglineStartPadding)
+		rightPaddingStr := strings.Repeat(" ", rightPadding)
+		contentStr = leftPadding + explosionText + rightPaddingStr
+	} else {
+		// Normal tagline rendering (centered)
+		leftPadding := strings.Repeat(" ", taglineStartPadding)
+		rightPaddingStr := strings.Repeat(" ", rightPadding)
+		contentStr = leftPadding + taglineText + rightPaddingStr
+	}
+
+	// Check if bullet is on this row (after explosion check, so bullet doesn't show during explosion)
+	if state.BulletActive && state.BulletY == 2 {
+		// Add bullet at current position
+		bulletChar := renderBullet()
+		bulletPos := state.BulletX
+		// Ensure bullet position is within bounds
+		if bulletPos >= 0 && bulletPos < boxWidth && bulletPos < len(contentStr) {
+			// Replace character at bullet position with bullet
+			contentStr = contentStr[:bulletPos] + bulletChar + contentStr[bulletPos+1:]
+		}
+	}
+
+	return titleStyle.Render("    ║") + contentStr + titleStyle.Render("║") + "\n"
+}
+
+// renderTaglineExplosion renders tagline explosion effect (similar to renderCompletedWordAnimation)
+func renderTaglineExplosion(tagline TaglineInfo) string {
+	timeSinceCompletion := time.Since(tagline.CompletedAt)
+	msElapsed := timeSinceCompletion.Milliseconds()
+
+	// Phase 1: Hit effect (0-150ms) - Bright flash
+	if msElapsed < 150 {
+		// Alternate between bright yellow and bright green for impact
+		if msElapsed < 50 {
+			return hitEffectStyle.Render(tagline.Text)
+		} else if msElapsed < 100 {
+			return fadingStyle1.Render(tagline.Text)
+		} else {
+			return hitEffectStyle.Render(tagline.Text)
+		}
+	}
+
+	// Phase 2: Letter-by-letter fade (150ms onwards)
+	// Each letter takes 80ms to fade through colors
+	const letterFadeTime = 80  // ms per letter
+	const animationStart = 150 // when fade animation starts
+
+	var result strings.Builder
+	wordLen := len(tagline.Text)
+
+	for i, ch := range tagline.Text {
+		letterStartTime := animationStart + int64(i*letterFadeTime)
+		letterElapsed := msElapsed - letterStartTime
+
+		var charStyle lipgloss.Style
+
+		if letterElapsed < 0 {
+			// Letter hasn't started fading yet - still bright green
+			charStyle = fadingStyle1
+		} else if letterElapsed < 20 {
+			// Stage 1: Bright green
+			charStyle = fadingStyle1
+		} else if letterElapsed < 40 {
+			// Stage 2: Medium green
+			charStyle = fadingStyle2
+		} else if letterElapsed < 60 {
+			// Stage 3: Light gray
+			charStyle = fadingStyle3
+		} else if letterElapsed < 80 {
+			// Stage 4: Medium gray
+			charStyle = fadingStyle4
+		} else {
+			// Stage 5: Dark gray (final)
+			charStyle = fadingStyle5
+		}
+
+		result.WriteString(charStyle.Render(string(ch)))
+	}
+
+	// After complete fade, show in dark gray
+	totalAnimTime := animationStart + int64(wordLen*letterFadeTime) + 80
+	if msElapsed >= totalAnimTime {
+		return completedWordStyle.Render(tagline.Text)
+	}
+
+	return result.String()
+}
+
+// renderBullet renders the bullet character
+func renderBullet() string {
+	bulletStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("226")). // Bright yellow
+		Bold(true)
+	return bulletStyle.Render("►")
+}
+
+// renderExplodingText renders text with explosion effect (similar to renderCompletedWordAnimation)
+func renderExplodingText(text string, framesIn int) string {
+	// Explosion phase 1: Hit flash (0-10 frames) - bright yellow with background
+	if framesIn < 10 {
+		hitStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("226")). // Bright yellow
+			Background(lipgloss.Color("52")). // Red background
+			Bold(true)
+		return hitStyle.Render(text)
+	}
+
+	// Explosion phase 2: Letter-by-letter fade (10+ frames)
+	const letterFadeTime = 8 // ms per letter equivalent in frames
+	const animationStart = 10
+
+	var result strings.Builder
+
+	for i, ch := range text {
+		letterStartTime := animationStart + i*letterFadeTime
+		letterElapsed := framesIn - letterStartTime
+
+		var charStyle lipgloss.Style
+
+		if letterElapsed < 0 {
+			// Letter hasn't started exploding yet
+			charStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Background(lipgloss.Color("52")).Bold(true)
+		} else if letterElapsed < 2 {
+			charStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Background(lipgloss.Color("52")).Bold(true)
+		} else if letterElapsed < 4 {
+			charStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("46")).Background(lipgloss.Color("52")).Bold(true) // Green on red
+		} else if letterElapsed < 6 {
+			charStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Background(lipgloss.Color("52")) // Medium green on red
+		} else if letterElapsed < 8 {
+			charStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Background(lipgloss.Color("52")) // Light gray on red
+		} else {
+			charStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Background(lipgloss.Color("52")) // Dark gray on red
+		}
+
+		result.WriteString(charStyle.Render(string(ch)))
+	}
+
+	return result.String()
+}
+
+// UpdateWelcomeAnimation updates the welcome animation state
+func UpdateWelcomeAnimation(state *WelcomeAnimationState) {
+	state.Frame++
+
+	const boxWidth = 46
+
+	// Bullet firing cycle
+	const bulletFireInterval = 30 // frames between shots (about 3 seconds)
+	const bulletSpeed = 3         // pixels per frame (faster)
+
+	// Check if explosion is done and reset triggered flag
+	if state.Exploding {
+		// Calculate time since explosion
+		timeSinceExplosion := time.Since(state.ExplosionTime)
+		// Total animation time = 150ms hit effect + (24 letters * 80ms) + 80ms = about 2150ms
+		const explosionDuration = 2200 * time.Millisecond
+		if timeSinceExplosion >= explosionDuration {
+			// Explosion done, reset all explosion state
+			state.Exploding = false
+			state.ExplosionTriggered = false
+		}
+	}
+
+	if !state.BulletActive && !state.Exploding {
+		// Check if it's time to fire a new bullet
+		if state.Frame%bulletFireInterval == 0 {
+			// Fire bullet from row 1, first position after ║
+			state.BulletX = 0 // first position in content area
+			state.BulletY = 1 // row below "Word Killer"
+			state.BulletActive = true
+		}
+	}
+
+	if state.BulletActive {
+		// Move bullet to the right
+		state.BulletX += bulletSpeed
+
+		// Check if bullet went off screen (width is 46)
+		// Use boxWidth - 1 to leave room for the border
+		if state.BulletX >= boxWidth-1 {
+			// Wrap to next row from left side
+			state.BulletY++
+			state.BulletX = 1 // start from left (offset by border)
+
+			// Don't let it continue past row 2 (tagline row)
+			if state.BulletY > 2 {
+				state.BulletActive = false
+			}
+		}
+	}
+}
+
+// renderShakingWord renders "Word" with random shaking effect
+// Each character independently shakes with random horizontal offset
+func renderShakingWord(text string, frame int) string {
+	// Change shake pattern every 5 frames for more dynamic effect
+	shakePattern := frame / 5
+
+	var result strings.Builder
+
+	for i, ch := range text {
+		// Generate different offset for each character and pattern
+		// Use different multipliers to create chaotic shaking
+		offset1 := (shakePattern + i*3) % 3
+		offset2 := (shakePattern + i*7) % 3
+
+		// -1, 0, or 1 spaces before the character
+		beforeSpaces := offset1 - 1
+		// 0, 1, or 2 spaces after the character
+		afterSpaces := offset2 + 1
+
+		// Add before spaces (can't go negative, so min 0)
+		if beforeSpaces > 0 {
+			result.WriteString(strings.Repeat(" ", beforeSpaces))
+		}
+
+		// Add the character
+		result.WriteString(titleStyle.Render(string(ch)))
+
+		// Add after spaces
+		if i < len(text)-1 {
+			result.WriteString(strings.Repeat(" ", afterSpaces))
+		}
+	}
+
+	return result.String()
+}
+
+// renderPulsingKiller renders "Killer" with red breathing pulse effect
+// Color cycles from dark red to bright red and back
+func renderPulsingKiller(text string, frame int) string {
+	// Pulse cycle: 40 frames for full cycle (about 4 seconds at 10fps)
+	const pulseCycle = 40
+	cyclePos := frame % pulseCycle
+
+	// Calculate pulse intensity using sine wave for smooth breathing effect
+	angle := float64(cyclePos) / float64(pulseCycle) * 2 * math.Pi
+	intensity := (math.Sin(angle-math.Pi/2) + 1) / 2 // 0.0 to 1.0
+
+	// Map intensity to ANSI color (red range: 88-196)
+	// 88 = dark red, 196 = bright red
+	colorCode := 88 + int(intensity*108)
+	color := lipgloss.Color(fmt.Sprintf("%d", colorCode))
+
+	// Create pulsing style with bold
+	pulseStyle := lipgloss.NewStyle().
+		Foreground(color).
+		Bold(true)
+
+	return pulseStyle.Render(text)
 }

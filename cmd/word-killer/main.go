@@ -16,19 +16,21 @@ type tickMsg time.Time
 
 // model is the Bubble Tea model
 type model struct {
-	game      *game.Game
-	cfg       *config.Config
-	ready     bool
-	width     int
-	height    int
-	animFrame int // animation frame counter for pause menu
+	game           *game.Game
+	cfg            *config.Config
+	ready          bool
+	width          int
+	height         int
+	animFrame      int // animation frame counter for pause menu
+	welcomeAnimState *ui.WelcomeAnimationState // welcome screen animation state
 }
 
 func initialModel(cfg *config.Config, g *game.Game) model {
 	return model{
-		game:  g,
-		cfg:   cfg,
-		ready: false,
+		game:           g,
+		cfg:            cfg,
+		ready:          false,
+		welcomeAnimState: &ui.WelcomeAnimationState{},
 	}
 }
 
@@ -55,6 +57,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		// Increment animation frame
 		m.animFrame++
+
+		// Update welcome animation if on welcome screen
+		if !m.ready {
+			ui.UpdateWelcomeAnimation(m.welcomeAnimState)
+		}
+
 		// Always return tick command to keep animation running
 		return m, tickCmd()
 	}
@@ -66,11 +74,27 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Waiting to start
 	if !m.ready {
 		switch msg.String() {
+		case "up", "k":
+			// Move selection up
+			m.welcomeAnimState.SelectedOption = (m.welcomeAnimState.SelectedOption - 1 + 2) % 2
+			return m, nil
+		case "down", "j":
+			// Move selection down
+			m.welcomeAnimState.SelectedOption = (m.welcomeAnimState.SelectedOption + 1) % 2
+			return m, nil
 		case "enter":
-			if err := m.game.Start(m.cfg.WordCount); err != nil {
+			// Confirm selection
+			if m.welcomeAnimState.SelectedOption == 0 {
+				// Start selected
+				if err := m.game.Start(m.cfg.WordCount); err != nil {
+					return m, tea.Quit
+				}
+				m.ready = true
+			} else {
+				// Quit selected
 				return m, tea.Quit
 			}
-			m.ready = true
+			return m, nil
 		case "esc", "ctrl+c":
 			return m, tea.Quit
 		}
@@ -134,7 +158,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	if !m.ready {
-		return ui.RenderWelcome()
+		return ui.RenderWelcome(m.welcomeAnimState)
 	}
 
 	if m.game.Status == game.StatusRunning {
