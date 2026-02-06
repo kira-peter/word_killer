@@ -12,93 +12,93 @@ import (
 // Styles
 var (
 	titleStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("86")).
-		Bold(true)
+			Foreground(lipgloss.Color("86")).
+			Bold(true)
 
 	wordStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252"))
+			Foreground(lipgloss.Color("252"))
 
 	highlightStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("46")).
-		Bold(true)
+			Foreground(lipgloss.Color("46")).
+			Bold(true)
 
 	inputStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("226")).
-		Bold(true)
+			Foreground(lipgloss.Color("226")).
+			Bold(true)
 
 	statsStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("117"))
+			Foreground(lipgloss.Color("117"))
 
 	hintStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("205"))
+			Foreground(lipgloss.Color("205"))
 
 	menuSelectedStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("46")).
-		Bold(true)
+				Foreground(lipgloss.Color("46")).
+				Bold(true)
 
 	menuNormalStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252"))
+			Foreground(lipgloss.Color("252"))
 
 	// Completed word styles
 	completedWordStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Strikethrough(true)
+				Foreground(lipgloss.Color("240")).
+				Strikethrough(true)
 
 	// Hit effect style (bright flash)
 	hitEffectStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("226")). // Bright yellow
-		Bold(true).
-		Underline(true)
+			Foreground(lipgloss.Color("226")). // Bright yellow
+			Bold(true).
+			Underline(true)
 
 	// Fading styles (for gradual transition)
 	fadingStyle1 = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("46")). // Bright green
-		Bold(true)
+			Foreground(lipgloss.Color("46")). // Bright green
+			Bold(true)
 
 	fadingStyle2 = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("82")) // Medium green
+			Foreground(lipgloss.Color("82")) // Medium green
 
 	fadingStyle3 = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("244")) // Light gray
+			Foreground(lipgloss.Color("244")) // Light gray
 
 	fadingStyle4 = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("242")) // Medium gray
+			Foreground(lipgloss.Color("242")) // Medium gray
 
 	fadingStyle5 = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")) // Dark gray (final)
+			Foreground(lipgloss.Color("240")) // Dark gray (final)
 
 	// New styles for professional layout
 	headerStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("117")).
-		Background(lipgloss.Color("235")).
-		Padding(0, 2).
-		MarginBottom(1)
+			Foreground(lipgloss.Color("117")).
+			Background(lipgloss.Color("235")).
+			Padding(0, 2).
+			MarginBottom(1)
 
 	statItemStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252")).
-		Bold(false)
+			Foreground(lipgloss.Color("252")).
+			Bold(false)
 
 	statValueStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("46")).
-		Bold(true)
+			Foreground(lipgloss.Color("46")).
+			Bold(true)
 
 	inputBoxStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("86")).
-		Width(contentWidth).
-		Padding(0, 2).
-		MarginTop(1)
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("86")).
+			Width(contentWidth).
+			Padding(0, 2).
+			MarginTop(1)
 
 	wordBoxStyle = lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Width(contentWidth).
-		Padding(1, 2).
-		MarginTop(1).
-		MarginBottom(1)
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("240")).
+			Width(contentWidth).
+			Padding(1, 2).
+			MarginTop(1).
+			MarginBottom(1)
 
 	separatorStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
+			Foreground(lipgloss.Color("240"))
 )
 
 // Layout constants
@@ -200,8 +200,9 @@ func renderOptionLine(state *WelcomeAnimationState, optionIndex int) string {
 	const boxWidth = 46
 
 	options := []string{"start", "quit"}
+	// Use random color for selected option
 	selectedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("226")). // Bright yellow
+		Foreground(getRandomMenuColor(state.Frame)).
 		Bold(true)
 	normalStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("252"))
@@ -505,14 +506,37 @@ func renderPauseArea(selectedIndex int, animFrame int) string {
 
 	lines = append(lines, "") // Empty line after box
 
-	// Menu options
-	options := []string{" Resume Game", " Quit Game"}
+	// Menu options - using same style as welcome screen
+	options := []string{"Resume Game", "Quit Game"}
+	// Use random color for selected option
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(getRandomMenuColor(animFrame)).
+		Bold(true)
+
 	for i, opt := range options {
+		// Build the option text with indicator
+		var optionDisplay string
 		if i == selectedIndex {
-			lines = append(lines, "                           "+menuSelectedStyle.Render("> "+opt))
+			optionDisplay = "> " + opt + " <"
 		} else {
-			lines = append(lines, "                             "+menuNormalStyle.Render(opt))
+			optionDisplay = "  " + opt + "  "
 		}
+
+		// Apply style
+		var styledText string
+		if i == selectedIndex {
+			styledText = selectedStyle.Render(optionDisplay)
+		} else {
+			styledText = menuNormalStyle.Render(optionDisplay)
+		}
+
+		// Use lipgloss to center the text within the content width
+		alignedText := lipgloss.NewStyle().
+			Width(contentWidth - 8). // Reserve space for padding and borders
+			Align(lipgloss.Center).
+			Render(styledText)
+
+		lines = append(lines, "  "+alignedText)
 	}
 
 	// Fill to exactly 12 lines (title + empty + 10 content rows)
@@ -531,6 +555,25 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// getRandomMenuColor returns a color for menu selection based on frame
+func getRandomMenuColor(frame int) lipgloss.Color {
+	// Define a palette of vibrant colors
+	colors := []string{
+		"226", // Bright yellow
+		"46",  // Bright green
+		"51",  // Bright cyan
+		"201", // Bright magenta
+		"208", // Bright orange
+		"196", // Bright red
+		"93",  // Bright purple
+		"87",  // Light blue
+	}
+
+	// Change color every 5 frames for smooth transition
+	colorIndex := (frame / 5) % len(colors)
+	return lipgloss.Color(colors[colorIndex])
 }
 
 // RenderResults renders game results with consistent layout
@@ -788,7 +831,7 @@ func renderExplodingText(text string, framesIn int) string {
 	if framesIn < 10 {
 		hitStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("226")). // Bright yellow
-			Background(lipgloss.Color("52")). // Red background
+			Background(lipgloss.Color("52")).  // Red background
 			Bold(true)
 		return hitStyle.Render(text)
 	}
