@@ -980,3 +980,144 @@ func renderPulsingKiller(text string, frame int) string {
 
 	return pulseStyle.Render(text)
 }
+
+// RenderModeSelection renders the mode selection screen
+func RenderModeSelection(selectedMode int, animFrame int) string {
+	var s strings.Builder
+
+	s.WriteString("\n\n")
+	s.WriteString(titleStyle.Render("    ╔══════════════════════════════════════════════╗") + "\n")
+	s.WriteString(titleStyle.Render("    ║                                              ║") + "\n")
+
+	// Title
+	titleText := "Select Game Mode"
+	centeredTitle := lipgloss.NewStyle().
+		Width(46).
+		Align(lipgloss.Center).
+		Render(titleStyle.Render(titleText))
+	s.WriteString(titleStyle.Render("    ║") + centeredTitle + titleStyle.Render("║") + "\n")
+
+	s.WriteString(titleStyle.Render("    ║                                              ║") + "\n")
+
+	// Mode options
+	modes := []string{"Classic Mode", "Sentence Mode"}
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(getRandomMenuColor(animFrame)).
+		Bold(true)
+
+	for i, mode := range modes {
+		var optionDisplay string
+		if i == selectedMode {
+			optionDisplay = "> " + mode + " <"
+		} else {
+			optionDisplay = "  " + mode + "  "
+		}
+
+		var styledText string
+		if i == selectedMode {
+			styledText = selectedStyle.Render(optionDisplay)
+		} else {
+			styledText = menuNormalStyle.Render(optionDisplay)
+		}
+
+		alignedText := lipgloss.NewStyle().
+			Width(46).
+			Align(lipgloss.Center).
+			Render(styledText)
+
+		s.WriteString(titleStyle.Render("    ║") + alignedText + titleStyle.Render("║") + "\n")
+	}
+
+	s.WriteString(titleStyle.Render("    ║                                              ║") + "\n")
+
+	// Hints
+	hintsText := "[↑↓] Select  [Enter] Confirm  [ESC] Back"
+	centeredHints := lipgloss.NewStyle().
+		Width(46).
+		Align(lipgloss.Center).
+		Render(hintStyle.Render(hintsText))
+	s.WriteString(titleStyle.Render("    ║") + centeredHints + titleStyle.Render("║") + "\n")
+
+	s.WriteString(titleStyle.Render("    ║                                              ║") + "\n")
+	s.WriteString(titleStyle.Render("    ╚══════════════════════════════════════════════╝") + "\n")
+
+	return s.String()
+}
+
+// RenderSentenceGame renders the sentence typing game screen
+func RenderSentenceGame(targetSentence string, userInput string, stats GameStats) string {
+	var s strings.Builder
+
+	// === TOP: Status Bar ===
+	timeStr := fmt.Sprintf("Time: %6.1fs", stats.ElapsedSeconds)
+	progressStr := fmt.Sprintf("Progress: %2d/%2d", len(userInput), len(targetSentence))
+	accuracyStr := fmt.Sprintf("Accuracy: %5.1f%%", stats.AccuracyPercent)
+
+	statusLine := fmt.Sprintf("%s  │  %s  │  %s", timeStr, progressStr, accuracyStr)
+	statusStyled := headerStyle.Render(statusLine)
+	s.WriteString(lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Center).Render(statusStyled))
+	s.WriteString("\n\n")
+
+	// === MIDDLE: Sentence Display Area ===
+	sentenceArea := renderSentenceArea(targetSentence, userInput)
+	s.WriteString(sentenceArea)
+	s.WriteString("\n")
+
+	// === BOTTOM: Stats and Hints ===
+	detailedStats := renderSentenceStats(stats, len(targetSentence))
+	s.WriteString(detailedStats)
+	s.WriteString("\n")
+
+	s.WriteString(hintStyle.Render("  [ESC] Pause  "))
+	s.WriteString("\n")
+
+	return s.String()
+}
+
+// renderSentenceArea renders the target sentence and user input with color coding
+func renderSentenceArea(targetSentence string, userInput string) string {
+	var content strings.Builder
+
+	content.WriteString(titleStyle.Render("Target:") + "\n")
+	content.WriteString("  " + wordStyle.Render(targetSentence) + "\n\n")
+
+	content.WriteString(titleStyle.Render("Your Input:") + "\n")
+	content.WriteString("  ")
+
+	// Render each character with color coding
+	for i, targetChar := range targetSentence {
+		if i < len(userInput) {
+			userChar := rune(userInput[i])
+			if userChar == targetChar {
+				// Correct character - green
+				content.WriteString(highlightStyle.Render(string(userChar)))
+			} else {
+				// Incorrect character - red
+				errorStyle := lipgloss.NewStyle().
+					Foreground(lipgloss.Color("196")).
+					Bold(true)
+				content.WriteString(errorStyle.Render(string(userChar)))
+			}
+		} else {
+			// Not yet typed - show target in gray
+			content.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.Color("240")).
+				Render(string(targetChar)))
+		}
+	}
+
+	return wordBoxStyle.Render(content.String())
+}
+
+// renderSentenceStats renders detailed statistics for sentence mode
+func renderSentenceStats(stats GameStats, totalChars int) string {
+	statsLine := fmt.Sprintf("Characters: %d/%d  │  Correct: %d  │  Speed: %.1f chars/s",
+		stats.TotalKeystrokes,
+		totalChars,
+		stats.CorrectChars,
+		stats.LettersPerSecond)
+
+	content := statsStyle.Render(statsLine)
+	return inputBoxStyle.Render(content)
+}
+

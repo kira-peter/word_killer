@@ -1,0 +1,53 @@
+# English Typing Practice Sentences
+# Each line is one sentence for typing practice
+
+The quick brown fox jumps over the lazy dog.
+Programming is the art of telling another human what one wants the computer to do.
+Practice makes perfect, especially in typing.
+A journey of a thousand miles begins with a single step.
+To be or not to be, that is the question.
+Life is what happens when you're busy making other plans.
+In the middle of difficulty lies opportunity.
+The only way to do great work is to love what you do.
+Success is not final, failure is not fatal: it is the courage to continue that counts.
+It does not matter how slowly you go as long as you do not stop.
+Believe you can and you're halfway there.
+The future belongs to those who believe in the beauty of their dreams.
+Quality is not an act, it is a habit.
+The best time to plant a tree was 20 years ago. The second best time is now.
+Do not wait to strike till the iron is hot; but make it hot by striking.
+Whether you think you can or you think you can't, you're right.
+The only impossible journey is the one you never begin.
+Everything you've ever wanted is on the other side of fear.
+Success usually comes to those who are too busy to be looking for it.
+Don't watch the clock; do what it does. Keep going.
+The way to get started is to quit talking and begin doing.
+Don't be afraid to give up the good to go for the great.
+I find that the harder I work, the more luck I seem to have.
+Success is walking from failure to failure with no loss of enthusiasm.
+Opportunities don't happen. You create them.
+Don't let yesterday take up too much of today.
+You learn more from failure than from success. Don't let it stop you.
+It's not whether you get knocked down, it's whether you get up.
+If you are working on something that you really care about, you don't have to be pushed.
+We may encounter many defeats but we must not be defeated.
+Knowing is not enough; we must apply. Wishing is not enough; we must do.
+Imagine your life is perfect in every respect; what would it look like?
+We generate fears while we sit. We overcome them by action.
+Security is mostly a superstition. Life is either a daring adventure or nothing.
+The man who has confidence in himself gains the confidence of others.
+The only limit to our realization of tomorrow will be our doubts of today.
+Creativity is intelligence having fun.
+What you lack in talent can be made up with desire, hustle and giving 110% all the time.
+Do what you can with all you have, wherever you are.
+Develop an 'Attitude of Gratitude'. Say thank you to everyone you meet for everything they do for you.
+You are never too old to set another goal or to dream a new dream.
+Waste no more time arguing about what a good man should be. Be one.
+Nobody ever wrote down a plan to be broke, fat, lazy, or stupid. Those things are what happen when you don't have a plan.
+To live a creative life, we must lose our fear of being wrong.
+If you are not willing to risk the usual you will have to settle for the ordinary.
+Trust because you are willing to accept the risk, not because it's safe or certain.
+All our dreams can come true if we have the courage to pursue them.
+Good things come to people who wait, but better things come to those who go out and get them.
+If you do what you always did, you will get what you always got.
+Success is how high you bounce when you hit bottom.

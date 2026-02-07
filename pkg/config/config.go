@@ -20,18 +20,22 @@ type Config struct {
 	ShortRatio  float64 `json:"short_ratio"`
 	MediumRatio float64 `json:"medium_ratio"`
 	LongRatio   float64 `json:"long_ratio"`
+
+	// Sentence mode dictionary path
+	SentenceDictPath string `json:"sentence_dict_path"`
 }
 
 // DefaultConfig returns default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		WordCount:      20, // default 20 words
-		ShortDictPath:  "data/google-10000-short.txt",
-		MediumDictPath: "data/google-10000-medium.txt",
-		LongDictPath:   "data/google-10000-long.txt",
-		ShortRatio:     30,
-		MediumRatio:    50,
-		LongRatio:      20,
+		WordCount:        20, // default 20 words
+		ShortDictPath:    "data/google-10000-short.txt",
+		MediumDictPath:   "data/google-10000-medium.txt",
+		LongDictPath:     "data/google-10000-long.txt",
+		ShortRatio:       30,
+		MediumRatio:      50,
+		LongRatio:        20,
+		SentenceDictPath: "data/sentences.txt",
 	}
 }
 

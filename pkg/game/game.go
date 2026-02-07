@@ -21,6 +21,14 @@ const (
 	StatusFinished
 )
 
+// GameMode game mode
+type GameMode int
+
+const (
+	ModeClassic GameMode = iota
+	ModeSentence
+)
+
 // Word represents a word in the game
 type Word struct {
 	Text         string
@@ -31,6 +39,7 @@ type Word struct {
 // Game core game logic
 type Game struct {
 	Status           GameStatus
+	Mode             GameMode
 	Words            []Word
 	InputBuffer      string
 	Stats            *stats.Statistics
@@ -45,6 +54,9 @@ type Game struct {
 	shortRatio       float64
 	mediumRatio      float64
 	longRatio        float64
+	// Sentence mode fields
+	TargetSentence   string
+	sentences        []string
 }
 
 // New creates a new game instance
@@ -131,6 +143,35 @@ func (g *Game) loadDictToPool(path string, pool *[]string) error {
 	return nil
 }
 
+// LoadSentences loads sentences from a text file
+func (g *Game) LoadSentences(path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("failed to open sentences file: %w", err)
+	}
+	defer file.Close()
+
+	g.sentences = make([]string, 0)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// Skip empty lines and comments
+		if line != "" && !strings.HasPrefix(line, "#") {
+			g.sentences = append(g.sentences, line)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("failed to read sentences file: %w", err)
+	}
+
+	if len(g.sentences) == 0 {
+		return fmt.Errorf("sentences file is empty")
+	}
+
+	return nil
+}
+
 // Start starts the game
 func (g *Game) Start(wordCount int) error {
 	// Check if dictionaries are loaded
@@ -140,6 +181,7 @@ func (g *Game) Start(wordCount int) error {
 
 	// Reset game state
 	g.Status = StatusRunning
+	g.Mode = ModeClassic
 	g.InputBuffer = ""
 	g.Aborted = false
 	g.Stats.Reset()
@@ -148,6 +190,28 @@ func (g *Game) Start(wordCount int) error {
 
 	// Generate game words from multi-pools
 	g.Words = g.generateWordsFromMultiPools(wordCount)
+
+	return nil
+}
+
+// StartSentenceMode starts the game in sentence mode
+func (g *Game) StartSentenceMode() error {
+	// Check if sentences are loaded
+	if len(g.sentences) == 0 {
+		return fmt.Errorf("sentences not loaded")
+	}
+
+	// Reset game state
+	g.Status = StatusRunning
+	g.Mode = ModeSentence
+	g.InputBuffer = ""
+	g.Aborted = false
+	g.Stats.Reset()
+	g.Stats.Start()
+
+	// Randomly select a sentence
+	idx := g.rng.Intn(len(g.sentences))
+	g.TargetSentence = g.sentences[idx]
 
 	return nil
 }
@@ -258,13 +322,36 @@ func (g *Game) AddChar(ch rune) {
 		return
 	}
 
-	g.InputBuffer += string(ch)
-	g.Stats.AddKeystroke()
+	// Handle based on game mode
+	if g.Mode == ModeSentence {
+		// Sentence mode: accept all printable characters
+		if ch >= 32 && ch <= 126 { // ASCII printable range
+			g.InputBuffer += string(ch)
+			g.Stats.AddKeystroke()
 
-	// 检查是否匹配
-	if g.hasMatch() {
-		g.Stats.AddValidKeystroke()
-		g.Stats.AddCorrectChar()
+			// Check if the character matches the target at this position
+			pos := len(g.InputBuffer) - 1
+			if pos < len(g.TargetSentence) {
+				if g.InputBuffer[pos] == g.TargetSentence[pos] {
+					g.Stats.AddCorrectChar()
+				}
+			}
+
+			// Check if sentence is completed
+			if len(g.InputBuffer) == len(g.TargetSentence) {
+				// Sentence completed, but don't finish until Enter is pressed
+			}
+		}
+	} else {
+		// Classic mode: only accept letters
+		g.InputBuffer += string(ch)
+		g.Stats.AddKeystroke()
+
+		// 检查是否匹配
+		if g.hasMatch() {
+			g.Stats.AddValidKeystroke()
+			g.Stats.AddCorrectChar()
+		}
 	}
 }
 
@@ -280,7 +367,7 @@ func (g *Game) Backspace() {
 	}
 }
 
-// TryEliminate tries to eliminate a word
+// TryEliminate tries to eliminate a word or finish sentence
 func (g *Game) TryEliminate() {
 	if g.Status != StatusRunning {
 		return
@@ -288,6 +375,16 @@ func (g *Game) TryEliminate() {
 
 	g.Stats.AddKeystroke()
 
+	if g.Mode == ModeSentence {
+		// Sentence mode: finish if input length matches target
+		if len(g.InputBuffer) == len(g.TargetSentence) {
+			g.finish(false)
+		}
+		// Otherwise ignore Enter key
+		return
+	}
+
+	// Classic mode: eliminate matching word
 	if g.InputBuffer == "" {
 		return
 	}

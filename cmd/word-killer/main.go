@@ -16,20 +16,24 @@ type tickMsg time.Time
 
 // model is the Bubble Tea model
 type model struct {
-	game           *game.Game
-	cfg            *config.Config
-	ready          bool
-	width          int
-	height         int
-	animFrame      int // animation frame counter for pause menu
+	game             *game.Game
+	cfg              *config.Config
+	ready            bool
+	showModeSelect   bool // true when showing mode selection screen
+	selectedMode     int  // 0=Classic, 1=Sentence
+	width            int
+	height           int
+	animFrame        int                       // animation frame counter for pause menu
 	welcomeAnimState *ui.WelcomeAnimationState // welcome screen animation state
 }
 
 func initialModel(cfg *config.Config, g *game.Game) model {
 	return model{
-		game:           g,
-		cfg:            cfg,
-		ready:          false,
+		game:             g,
+		cfg:              cfg,
+		ready:            false,
+		showModeSelect:   false,
+		selectedMode:     0,
 		welcomeAnimState: &ui.WelcomeAnimationState{},
 	}
 }
@@ -71,8 +75,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Waiting to start
-	if !m.ready {
+	// Welcome screen
+	if !m.ready && !m.showModeSelect {
 		switch msg.String() {
 		case "up", "k":
 			// Move selection up
@@ -85,17 +89,51 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "enter":
 			// Confirm selection
 			if m.welcomeAnimState.SelectedOption == 0 {
-				// Start selected
-				if err := m.game.Start(m.cfg.WordCount); err != nil {
-					return m, tea.Quit
-				}
-				m.ready = true
+				// Start selected - show mode selection
+				m.showModeSelect = true
+				m.selectedMode = 0
 			} else {
 				// Quit selected
 				return m, tea.Quit
 			}
 			return m, nil
 		case "esc", "ctrl+c":
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
+	// Mode selection screen
+	if !m.ready && m.showModeSelect {
+		switch msg.String() {
+		case "up", "k":
+			// Move selection up
+			m.selectedMode = (m.selectedMode - 1 + 2) % 2
+			return m, nil
+		case "down", "j":
+			// Move selection down
+			m.selectedMode = (m.selectedMode + 1) % 2
+			return m, nil
+		case "enter":
+			// Start game with selected mode
+			var err error
+			if m.selectedMode == 0 {
+				// Classic mode
+				err = m.game.Start(m.cfg.WordCount)
+			} else {
+				// Sentence mode
+				err = m.game.StartSentenceMode()
+			}
+			if err != nil {
+				return m, tea.Quit
+			}
+			m.ready = true
+			return m, nil
+		case "esc":
+			// Go back to welcome screen
+			m.showModeSelect = false
+			return m, nil
+		case "ctrl+c":
 			return m, tea.Quit
 		}
 		return m, nil
@@ -111,15 +149,23 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "backspace":
 			m.game.Backspace()
 		default:
-			// Letter keys
+			// Handle input based on game mode
 			runes := []rune(msg.String())
 			if len(runes) == 1 {
 				r := runes[0]
-				if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-					if r >= 'A' && r <= 'Z' {
-						r = r + 32
+				if m.game.Mode == game.ModeSentence {
+					// Sentence mode: accept all printable characters
+					if r >= 32 && r <= 126 {
+						m.game.AddChar(r)
 					}
-					m.game.AddChar(r)
+				} else {
+					// Classic mode: only letters
+					if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+						if r >= 'A' && r <= 'Z' {
+							r = r + 32
+						}
+						m.game.AddChar(r)
+					}
 				}
 			}
 		}
@@ -157,11 +203,35 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	if !m.ready {
+	// Welcome screen
+	if !m.ready && !m.showModeSelect {
 		return ui.RenderWelcome(m.welcomeAnimState)
 	}
 
+	// Mode selection screen
+	if !m.ready && m.showModeSelect {
+		return ui.RenderModeSelection(m.selectedMode, m.animFrame)
+	}
+
 	if m.game.Status == game.StatusRunning {
+		// Render based on game mode
+		if m.game.Mode == game.ModeSentence {
+			// Sentence mode rendering
+			stats := ui.GameStats{
+				TotalKeystrokes:  m.game.Stats.TotalKeystrokes,
+				ValidKeystrokes:  m.game.Stats.ValidKeystrokes,
+				CorrectChars:     m.game.Stats.CorrectChars,
+				WordsCompleted:   m.game.Stats.WordsCompleted,
+				TotalLetters:     m.game.Stats.TotalLetters,
+				ElapsedSeconds:   m.game.Stats.GetElapsedSeconds(),
+				LettersPerSecond: m.game.Stats.GetLettersPerSecond(),
+				WordsPerSecond:   m.game.Stats.GetWordsPerSecond(),
+				AccuracyPercent:  m.game.Stats.GetAccuracyPercent(),
+			}
+			return ui.RenderSentenceGame(m.game.TargetSentence, m.game.InputBuffer, stats)
+		}
+
+		// Classic mode rendering (existing code)
 		// Get all words (including completed ones)
 		allWords := m.game.GetAllWords()
 		wordInfos := make([]ui.WordInfo, len(allWords))
@@ -177,15 +247,15 @@ func (m model) View() string {
 		activeWords := m.game.GetActiveWords()
 
 		stats := ui.GameStats{
-			TotalKeystrokes:   m.game.Stats.TotalKeystrokes,
-			ValidKeystrokes:   m.game.Stats.ValidKeystrokes,
-			CorrectChars:      m.game.Stats.CorrectChars,
-			WordsCompleted:    m.game.Stats.WordsCompleted,
-			TotalLetters:      m.game.Stats.TotalLetters,
-			ElapsedSeconds:    m.game.Stats.GetElapsedSeconds(),
-			LettersPerSecond:  m.game.Stats.GetLettersPerSecond(),
-			WordsPerSecond:    m.game.Stats.GetWordsPerSecond(),
-			AccuracyPercent:   m.game.Stats.GetAccuracyPercent(),
+			TotalKeystrokes:  m.game.Stats.TotalKeystrokes,
+			ValidKeystrokes:  m.game.Stats.ValidKeystrokes,
+			CorrectChars:     m.game.Stats.CorrectChars,
+			WordsCompleted:   m.game.Stats.WordsCompleted,
+			TotalLetters:     m.game.Stats.TotalLetters,
+			ElapsedSeconds:   m.game.Stats.GetElapsedSeconds(),
+			LettersPerSecond: m.game.Stats.GetLettersPerSecond(),
+			WordsPerSecond:   m.game.Stats.GetWordsPerSecond(),
+			AccuracyPercent:  m.game.Stats.GetAccuracyPercent(),
 		}
 
 		return ui.RenderGame(wordInfos, highlighted, m.game.InputBuffer, stats, len(activeWords))
@@ -193,28 +263,28 @@ func (m model) View() string {
 		// Pass stats and animation frame to pause menu
 		activeWords := m.game.GetActiveWords()
 		stats := ui.GameStats{
-			TotalKeystrokes:   m.game.Stats.TotalKeystrokes,
-			ValidKeystrokes:   m.game.Stats.ValidKeystrokes,
-			CorrectChars:      m.game.Stats.CorrectChars,
-			WordsCompleted:    m.game.Stats.WordsCompleted,
-			TotalLetters:      m.game.Stats.TotalLetters,
-			ElapsedSeconds:    m.game.Stats.GetElapsedSeconds(),
-			LettersPerSecond:  m.game.Stats.GetLettersPerSecond(),
-			WordsPerSecond:    m.game.Stats.GetWordsPerSecond(),
-			AccuracyPercent:   m.game.Stats.GetAccuracyPercent(),
+			TotalKeystrokes:  m.game.Stats.TotalKeystrokes,
+			ValidKeystrokes:  m.game.Stats.ValidKeystrokes,
+			CorrectChars:     m.game.Stats.CorrectChars,
+			WordsCompleted:   m.game.Stats.WordsCompleted,
+			TotalLetters:     m.game.Stats.TotalLetters,
+			ElapsedSeconds:   m.game.Stats.GetElapsedSeconds(),
+			LettersPerSecond: m.game.Stats.GetLettersPerSecond(),
+			WordsPerSecond:   m.game.Stats.GetWordsPerSecond(),
+			AccuracyPercent:  m.game.Stats.GetAccuracyPercent(),
 		}
 		return ui.RenderPauseMenu(m.game.PauseMenuIndex, stats, len(activeWords), m.animFrame)
 	} else if m.game.Status == game.StatusFinished {
 		stats := ui.GameStats{
-			TotalKeystrokes:   m.game.Stats.TotalKeystrokes,
-			ValidKeystrokes:   m.game.Stats.ValidKeystrokes,
-			CorrectChars:      m.game.Stats.CorrectChars,
-			WordsCompleted:    m.game.Stats.WordsCompleted,
-			TotalLetters:      m.game.Stats.TotalLetters,
-			ElapsedSeconds:    m.game.Stats.GetElapsedSeconds(),
-			LettersPerSecond:  m.game.Stats.GetLettersPerSecond(),
-			WordsPerSecond:    m.game.Stats.GetWordsPerSecond(),
-			AccuracyPercent:   m.game.Stats.GetAccuracyPercent(),
+			TotalKeystrokes:  m.game.Stats.TotalKeystrokes,
+			ValidKeystrokes:  m.game.Stats.ValidKeystrokes,
+			CorrectChars:     m.game.Stats.CorrectChars,
+			WordsCompleted:   m.game.Stats.WordsCompleted,
+			TotalLetters:     m.game.Stats.TotalLetters,
+			ElapsedSeconds:   m.game.Stats.GetElapsedSeconds(),
+			LettersPerSecond: m.game.Stats.GetLettersPerSecond(),
+			WordsPerSecond:   m.game.Stats.GetWordsPerSecond(),
+			AccuracyPercent:  m.game.Stats.GetAccuracyPercent(),
 		}
 
 		return ui.RenderResults(stats, m.game.Aborted)
@@ -252,6 +322,12 @@ func main() {
 	); err != nil {
 		fmt.Printf("Failed to load word dictionaries: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Load sentences for sentence mode
+	if err := g.LoadSentences(cfg.SentenceDictPath); err != nil {
+		fmt.Printf("Warning: Failed to load sentences: %v\n", err)
+		// Continue anyway - classic mode will still work
 	}
 
 	// Create Bubble Tea program
