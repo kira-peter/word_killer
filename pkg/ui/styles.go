@@ -507,7 +507,7 @@ func renderPauseArea(selectedIndex int, animFrame int) string {
 	lines = append(lines, "") // Empty line after box
 
 	// Menu options - using same style as welcome screen
-	options := []string{"Resume Game", "Quit Game"}
+	options := []string{"Resume Game", "Restart", "Quit Game"}
 	// Use random color for selected option
 	selectedStyle := lipgloss.NewStyle().
 		Foreground(getRandomMenuColor(animFrame)).
@@ -540,8 +540,8 @@ func renderPauseArea(selectedIndex int, animFrame int) string {
 	}
 
 	// Fill to exactly 12 lines (title + empty + 10 content rows)
-	// Current: 1 title + 1 empty + 5 box + 1 empty + 2 menu = 10 lines
-	// Need 2 more lines
+	// Current: 1 title + 1 empty + 5 box + 1 empty + 3 menu = 11 lines
+	// Need 1 more line
 	for len(lines) < 12 {
 		lines = append(lines, "")
 	}
@@ -577,7 +577,7 @@ func getRandomMenuColor(frame int) lipgloss.Color {
 }
 
 // RenderResults renders game results with consistent layout
-func RenderResults(stats GameStats, aborted bool) string {
+func RenderResults(stats GameStats, aborted bool, selectedIndex int, animFrame int) string {
 	var s strings.Builder
 
 	// === TOP: Header ===
@@ -596,12 +596,55 @@ func RenderResults(stats GameStats, aborted bool) string {
 	s.WriteString(statsArea)
 	s.WriteString("\n")
 
-	// === BOTTOM: Exit Hint ===
-	hints := inputBoxStyle.Render("Press any key to exit...")
-	s.WriteString(hints)
+	// === BOTTOM: Menu Options ===
+	menuArea := renderResultsMenu(selectedIndex, animFrame)
+	s.WriteString(menuArea)
 	s.WriteString("\n")
 
 	return s.String()
+}
+
+// renderResultsMenu renders the menu at the bottom of results page
+func renderResultsMenu(selectedIndex int, animFrame int) string {
+	options := []string{"Restart", "Exit"}
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(getRandomMenuColor(animFrame)).
+		Bold(true)
+
+	var menuItems []string
+	for i, opt := range options {
+		var optionDisplay string
+		if i == selectedIndex {
+			optionDisplay = "> " + opt + " <"
+		} else {
+			optionDisplay = "  " + opt + "  "
+		}
+
+		var styledText string
+		if i == selectedIndex {
+			styledText = selectedStyle.Render(optionDisplay)
+		} else {
+			styledText = menuNormalStyle.Render(optionDisplay)
+		}
+
+		menuItems = append(menuItems, styledText)
+	}
+
+	// Join menu items horizontally with spacing
+	menuLine := strings.Join(menuItems, "    ")
+	centeredMenu := lipgloss.NewStyle().
+		Width(contentWidth).
+		Align(lipgloss.Center).
+		Render(menuLine)
+
+	hints := hintStyle.Render("[↑↓] Select  [Enter] Confirm  [ESC] Exit")
+	centeredHints := lipgloss.NewStyle().
+		Width(contentWidth).
+		Align(lipgloss.Center).
+		Render(hints)
+
+	content := centeredMenu + "\n\n" + centeredHints
+	return inputBoxStyle.Render(content)
 }
 
 // renderResultsArea renders the statistics area

@@ -21,6 +21,7 @@ type model struct {
 	ready            bool
 	showModeSelect   bool // true when showing mode selection screen
 	selectedMode     int  // 0=Classic, 1=Sentence
+	resultsMenuIndex int  // results page menu selected index (0=restart, 1=exit)
 	width            int
 	height           int
 	animFrame        int                       // animation frame counter for pause menu
@@ -34,6 +35,7 @@ func initialModel(cfg *config.Config, g *game.Game) model {
 		ready:            false,
 		showModeSelect:   false,
 		selectedMode:     0,
+		resultsMenuIndex: 0,
 		welcomeAnimState: &ui.WelcomeAnimationState{},
 	}
 }
@@ -185,9 +187,19 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "down", "j":
 			m.game.MovePauseMenu(1)
 		case "enter":
-			m.game.ConfirmPauseMenu()
-			// If quit was selected, check status
-			if m.game.Status == game.StatusFinished {
+			shouldRestart := m.game.ConfirmPauseMenu()
+			// If restart was selected
+			if shouldRestart && m.game.Status == game.StatusFinished {
+				// Restart the same game mode
+				if m.game.Mode == game.ModeSentence {
+					m.game.StartSentenceMode()
+				} else {
+					m.game.Start(m.cfg.WordCount)
+				}
+			}
+			// If game ended from quit, stay on results page
+			if m.game.Status == game.StatusFinished && !shouldRestart {
+				m.resultsMenuIndex = 0
 				return m, nil
 			}
 		case "esc", "ctrl+c":
@@ -195,8 +207,34 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	} else if m.game.Status == game.StatusFinished {
-		// Results page, press any key to exit
-		return m, tea.Quit
+		// Results page menu
+		switch msg.String() {
+		case "up", "k":
+			m.resultsMenuIndex--
+			if m.resultsMenuIndex < 0 {
+				m.resultsMenuIndex = 0
+			}
+		case "down", "j":
+			m.resultsMenuIndex++
+			if m.resultsMenuIndex > 1 {
+				m.resultsMenuIndex = 1
+			}
+		case "enter":
+			if m.resultsMenuIndex == 0 {
+				// Restart - start the same game mode
+				if m.game.Mode == game.ModeSentence {
+					m.game.StartSentenceMode()
+				} else {
+					m.game.Start(m.cfg.WordCount)
+				}
+			} else {
+				// Exit
+				return m, tea.Quit
+			}
+		case "esc", "ctrl+c":
+			return m, tea.Quit
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -287,7 +325,7 @@ func (m model) View() string {
 			AccuracyPercent:  m.game.Stats.GetAccuracyPercent(),
 		}
 
-		return ui.RenderResults(stats, m.game.Aborted)
+		return ui.RenderResults(stats, m.game.Aborted, m.resultsMenuIndex, m.animFrame)
 	}
 
 	return ""

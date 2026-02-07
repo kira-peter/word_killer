@@ -434,23 +434,29 @@ func (g *Game) MovePauseMenu(delta int) {
 	g.PauseMenuIndex += delta
 	if g.PauseMenuIndex < 0 {
 		g.PauseMenuIndex = 0
-	} else if g.PauseMenuIndex > 1 {
-		g.PauseMenuIndex = 1
+	} else if g.PauseMenuIndex > 2 {
+		g.PauseMenuIndex = 2
 	}
 }
 
 // ConfirmPauseMenu 确认暂停菜单选择
-func (g *Game) ConfirmPauseMenu() {
+func (g *Game) ConfirmPauseMenu() bool {
 	if g.Status != StatusPaused {
-		return
+		return false
 	}
 
 	if g.PauseMenuIndex == 0 {
 		// 继续游戏
 		g.Resume()
+		return false
+	} else if g.PauseMenuIndex == 1 {
+		// 重新开始 - return true to signal restart
+		g.finish(true)
+		return true
 	} else {
 		// 结束游戏
 		g.finish(true)
+		return false
 	}
 }
 
