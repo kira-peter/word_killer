@@ -43,7 +43,8 @@ type Game struct {
 	Words            []Word
 	InputBuffer      string
 	Stats            *stats.Statistics
-	PauseMenuIndex   int // pause menu selected index (0=resume, 1=quit)
+	PauseMenuIndex   int // pause menu selected index (0=resume, 1=restart, 2=select mode, 3=main menu)
+	ResultsMenuIndex int // results menu selected index (0=restart, 1=select mode, 2=main menu)
 	Aborted          bool
 	shortPool        []string
 	mediumPool       []string
@@ -62,11 +63,12 @@ type Game struct {
 // New creates a new game instance
 func New() *Game {
 	return &Game{
-		Status:         StatusIdle,
-		Stats:          stats.New(),
-		PauseMenuIndex: 0,
-		usedWords:      make(map[string]bool),
-		rng:            rand.New(rand.NewSource(time.Now().UnixNano())),
+		Status:           StatusIdle,
+		Stats:            stats.New(),
+		PauseMenuIndex:   0,
+		ResultsMenuIndex: 0,
+		usedWords:        make(map[string]bool),
+		rng:              rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -373,16 +375,17 @@ func (g *Game) TryEliminate() {
 		return
 	}
 
-	g.Stats.AddKeystroke()
-
 	if g.Mode == ModeSentence {
 		// Sentence mode: finish if input length matches target
+		// Don't count Enter key as a keystroke in sentence mode
 		if len(g.InputBuffer) == len(g.TargetSentence) {
 			g.finish(false)
 		}
 		// Otherwise ignore Enter key
 		return
 	}
+
+	g.Stats.AddKeystroke()
 
 	// Classic mode: eliminate matching word
 	if g.InputBuffer == "" {
@@ -434,29 +437,22 @@ func (g *Game) MovePauseMenu(delta int) {
 	g.PauseMenuIndex += delta
 	if g.PauseMenuIndex < 0 {
 		g.PauseMenuIndex = 0
-	} else if g.PauseMenuIndex > 2 {
-		g.PauseMenuIndex = 2
+	} else if g.PauseMenuIndex > 3 {
+		g.PauseMenuIndex = 3
 	}
 }
 
-// ConfirmPauseMenu 确认暂停菜单选择
-func (g *Game) ConfirmPauseMenu() bool {
-	if g.Status != StatusPaused {
-		return false
+// MoveResultsMenu 移动结果菜单选项
+func (g *Game) MoveResultsMenu(delta int) {
+	if g.Status != StatusFinished {
+		return
 	}
 
-	if g.PauseMenuIndex == 0 {
-		// 继续游戏
-		g.Resume()
-		return false
-	} else if g.PauseMenuIndex == 1 {
-		// 重新开始 - return true to signal restart
-		g.finish(true)
-		return true
-	} else {
-		// 结束游戏
-		g.finish(true)
-		return false
+	g.ResultsMenuIndex += delta
+	if g.ResultsMenuIndex < 0 {
+		g.ResultsMenuIndex = 0
+	} else if g.ResultsMenuIndex > 2 {
+		g.ResultsMenuIndex = 2
 	}
 }
 
@@ -471,6 +467,7 @@ func (g *Game) Abort() {
 func (g *Game) finish(aborted bool) {
 	g.Status = StatusFinished
 	g.Aborted = aborted
+	g.ResultsMenuIndex = 0
 	g.Stats.Finish()
 }
 

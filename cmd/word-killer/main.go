@@ -20,8 +20,8 @@ type model struct {
 	cfg              *config.Config
 	ready            bool
 	showModeSelect   bool // true when showing mode selection screen
+	showAbout        bool // true when showing about page
 	selectedMode     int  // 0=Classic, 1=Sentence
-	resultsMenuIndex int  // results page menu selected index (0=restart, 1=exit)
 	width            int
 	height           int
 	animFrame        int                       // animation frame counter for pause menu
@@ -34,8 +34,8 @@ func initialModel(cfg *config.Config, g *game.Game) model {
 		cfg:              cfg,
 		ready:            false,
 		showModeSelect:   false,
+		showAbout:        false,
 		selectedMode:     0,
-		resultsMenuIndex: 0,
 		welcomeAnimState: &ui.WelcomeAnimationState{},
 	}
 }
@@ -65,7 +65,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.animFrame++
 
 		// Update welcome animation if on welcome screen
-		if !m.ready {
+		if !m.ready && !m.showModeSelect && !m.showAbout {
 			ui.UpdateWelcomeAnimation(m.welcomeAnimState)
 		}
 
@@ -77,16 +77,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// About screen
+	if !m.ready && m.showAbout {
+		switch msg.String() {
+		case "esc", "enter", "ctrl+c":
+			// Go back to welcome screen
+			m.showAbout = false
+			return m, nil
+		}
+		return m, nil
+	}
+
 	// Welcome screen
-	if !m.ready && !m.showModeSelect {
+	if !m.ready && !m.showModeSelect && !m.showAbout {
 		switch msg.String() {
 		case "up", "k":
-			// Move selection up
-			m.welcomeAnimState.SelectedOption = (m.welcomeAnimState.SelectedOption - 1 + 2) % 2
+			// Move selection up (3 options now)
+			m.welcomeAnimState.SelectedOption = (m.welcomeAnimState.SelectedOption - 1 + 3) % 3
 			return m, nil
 		case "down", "j":
-			// Move selection down
-			m.welcomeAnimState.SelectedOption = (m.welcomeAnimState.SelectedOption + 1) % 2
+			// Move selection down (3 options now)
+			m.welcomeAnimState.SelectedOption = (m.welcomeAnimState.SelectedOption + 1) % 3
 			return m, nil
 		case "enter":
 			// Confirm selection
@@ -94,6 +105,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Start selected - show mode selection
 				m.showModeSelect = true
 				m.selectedMode = 0
+			} else if m.welcomeAnimState.SelectedOption == 1 {
+				// About selected
+				m.showAbout = true
 			} else {
 				// Quit selected
 				return m, tea.Quit
@@ -180,56 +194,67 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 	} else if m.game.Status == game.StatusPaused {
-		// Pause menu
+		// Pause menu - 4 options: Resume, Restart, Select Mode, Main Menu
 		switch msg.String() {
 		case "up", "k":
 			m.game.MovePauseMenu(-1)
 		case "down", "j":
 			m.game.MovePauseMenu(1)
 		case "enter":
-			shouldRestart := m.game.ConfirmPauseMenu()
-			// If restart was selected
-			if shouldRestart && m.game.Status == game.StatusFinished {
-				// Restart the same game mode
+			idx := m.game.PauseMenuIndex
+			if idx == 0 {
+				// Resume Game
+				m.game.Resume()
+			} else if idx == 1 {
+				// Restart - same mode
 				if m.game.Mode == game.ModeSentence {
 					m.game.StartSentenceMode()
 				} else {
 					m.game.Start(m.cfg.WordCount)
 				}
-			}
-			// If game ended from quit, stay on results page
-			if m.game.Status == game.StatusFinished && !shouldRestart {
-				m.resultsMenuIndex = 0
-				return m, nil
+			} else if idx == 2 {
+				// Select Mode - go back to mode selection
+				m.ready = false
+				m.showModeSelect = true
+				m.selectedMode = 0
+			} else if idx == 3 {
+				// Main Menu - go back to welcome
+				m.ready = false
+				m.showModeSelect = false
+				m.showAbout = false
+				m.welcomeAnimState.SelectedOption = 0
 			}
 		case "esc", "ctrl+c":
 			return m, tea.Quit
 		}
 		return m, nil
 	} else if m.game.Status == game.StatusFinished {
-		// Results page menu
+		// Results page - 3 options: Restart, Select Mode, Main Menu
 		switch msg.String() {
 		case "up", "k":
-			m.resultsMenuIndex--
-			if m.resultsMenuIndex < 0 {
-				m.resultsMenuIndex = 0
-			}
+			m.game.MoveResultsMenu(-1)
 		case "down", "j":
-			m.resultsMenuIndex++
-			if m.resultsMenuIndex > 1 {
-				m.resultsMenuIndex = 1
-			}
+			m.game.MoveResultsMenu(1)
 		case "enter":
-			if m.resultsMenuIndex == 0 {
-				// Restart - start the same game mode
+			idx := m.game.ResultsMenuIndex
+			if idx == 0 {
+				// Restart - same mode
 				if m.game.Mode == game.ModeSentence {
 					m.game.StartSentenceMode()
 				} else {
 					m.game.Start(m.cfg.WordCount)
 				}
-			} else {
-				// Exit
-				return m, tea.Quit
+			} else if idx == 1 {
+				// Select Mode - go back to mode selection
+				m.ready = false
+				m.showModeSelect = true
+				m.selectedMode = 0
+			} else if idx == 2 {
+				// Main Menu - go back to welcome
+				m.ready = false
+				m.showModeSelect = false
+				m.showAbout = false
+				m.welcomeAnimState.SelectedOption = 0
 			}
 		case "esc", "ctrl+c":
 			return m, tea.Quit
@@ -241,9 +266,14 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	// About screen
+	if !m.ready && m.showAbout {
+		return ui.RenderAbout()
+	}
+
 	// Welcome screen
 	if !m.ready && !m.showModeSelect {
-		return ui.RenderWelcome(m.welcomeAnimState)
+		return ui.RenderWelcome(m.welcomeAnimState, m.animFrame)
 	}
 
 	// Mode selection screen
@@ -325,7 +355,7 @@ func (m model) View() string {
 			AccuracyPercent:  m.game.Stats.GetAccuracyPercent(),
 		}
 
-		return ui.RenderResults(stats, m.game.Aborted, m.resultsMenuIndex, m.animFrame)
+		return ui.RenderResults(stats, m.game.Aborted, m.game.ResultsMenuIndex, m.animFrame)
 	}
 
 	return ""
