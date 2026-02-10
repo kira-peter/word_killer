@@ -27,6 +27,9 @@ type GameMode int
 const (
 	ModeClassic GameMode = iota
 	ModeSentence
+	ModeCountdown    // 倒计时模式 - 60秒限时
+	ModeSpeedRun     // 极速模式 - 固定25词
+	ModeRhythmMaster // 节奏大师 - 每词限时
 )
 
 // Word represents a word in the game
@@ -58,6 +61,26 @@ type Game struct {
 	// Sentence mode fields
 	TargetSentence   string
 	sentences        []string
+
+	// 倒计时模式专属字段
+	CountdownDuration  time.Duration // 总倒计时时长（如60秒）
+	CountdownStartTime time.Time     // 倒计时开始时间
+
+	// 极速模式专属字段
+	SpeedRunTargetWords int       // 固定单词数（如25个）
+	SpeedRunStartTime   time.Time // 用于毫秒级计时
+
+	// 节奏大师模式专属字段
+	CurrentWordStartTime time.Time     // 当前单词开始时间
+	WordTimeLimit        time.Duration // 每个单词的时间限制（初始2秒）
+	ConsecutiveSuccesses int           // 连击计数
+	DifficultyLevel      int           // 当前难度等级（每10词递增）
+
+	// 节奏大师配置参数
+	RhythmInitialTimeLimit float64 // 初始时间限制（秒）
+	RhythmMinTimeLimit     float64 // 最小时间限制（秒）
+	RhythmDifficultyStep   float64 // 难度递增步长（秒）
+	RhythmWordsPerLevel    int     // 每级所需单词数
 }
 
 // New creates a new game instance
@@ -218,6 +241,90 @@ func (g *Game) StartSentenceMode() error {
 	return nil
 }
 
+// StartCountdownMode 启动倒计时模式
+func (g *Game) StartCountdownMode(duration time.Duration) error {
+	// 检查词库是否加载
+	if len(g.shortPool) == 0 && len(g.mediumPool) == 0 && len(g.longPool) == 0 {
+		return fmt.Errorf("word dictionaries not loaded")
+	}
+
+	// 重置游戏状态
+	g.Status = StatusRunning
+	g.Mode = ModeCountdown
+	g.InputBuffer = ""
+	g.Aborted = false
+	g.Stats.Reset()
+	g.Stats.Start()
+	g.usedWords = make(map[string]bool)
+
+	// 初始化倒计时字段
+	g.CountdownDuration = duration
+	g.CountdownStartTime = time.Now()
+
+	// 生成初始单词（30个，后续动态补充）
+	g.Words = g.generateWordsFromMultiPools(30)
+
+	return nil
+}
+
+// StartSpeedRunMode 启动极速模式
+func (g *Game) StartSpeedRunMode(targetWords int) error {
+	// 检查词库是否加载
+	if len(g.shortPool) == 0 && len(g.mediumPool) == 0 && len(g.longPool) == 0 {
+		return fmt.Errorf("word dictionaries not loaded")
+	}
+
+	// 重置游戏状态
+	g.Status = StatusRunning
+	g.Mode = ModeSpeedRun
+	g.InputBuffer = ""
+	g.Aborted = false
+	g.Stats.Reset()
+	g.Stats.Start()
+	g.usedWords = make(map[string]bool)
+
+	// 初始化极速模式字段
+	g.SpeedRunTargetWords = targetWords
+	g.SpeedRunStartTime = time.Now()
+
+	// 生成固定数量的单词（25个）
+	g.Words = g.generateWordsFromMultiPools(targetWords)
+
+	return nil
+}
+
+// StartRhythmMasterMode 启动节奏大师模式
+func (g *Game) StartRhythmMasterMode() error {
+	// 检查词库是否加载
+	if len(g.shortPool) == 0 && len(g.mediumPool) == 0 && len(g.longPool) == 0 {
+		return fmt.Errorf("word dictionaries not loaded")
+	}
+
+	// 重置游戏状态
+	g.Status = StatusRunning
+	g.Mode = ModeRhythmMaster
+	g.InputBuffer = ""
+	g.Aborted = false
+	g.Stats.Reset()
+	g.Stats.Start()
+	g.usedWords = make(map[string]bool)
+
+	// 初始化节奏大师字段
+	g.WordTimeLimit = time.Duration(g.RhythmInitialTimeLimit * float64(time.Second)) // 使用配置的初始时间限制
+	g.ConsecutiveSuccesses = 0
+	g.DifficultyLevel = 0
+
+	// 生成大量单词（50个起步）
+	g.Words = g.generateWordsFromMultiPools(50)
+
+	// 标记第一个单词的开始时间
+	if len(g.Words) > 0 {
+		g.CurrentWordStartTime = time.Now()
+	}
+
+	return nil
+}
+
 // generateWordsFromMultiPools generates words from multiple difficulty pools based on ratios
 func (g *Game) generateWordsFromMultiPools(count int) []Word {
 	if count <= 0 {
@@ -324,6 +431,24 @@ func (g *Game) AddChar(ch rune) {
 		return
 	}
 
+	// 新增：模式特定的时间检查
+	switch g.Mode {
+	case ModeCountdown:
+		// 检查倒计时是否耗尽
+		elapsed := time.Since(g.CountdownStartTime)
+		if elapsed >= g.CountdownDuration {
+			g.finish(false) // 时间到，游戏结束
+			return
+		}
+	case ModeRhythmMaster:
+		// 检查当前单词是否超时
+		wordElapsed := time.Since(g.CurrentWordStartTime)
+		if wordElapsed >= g.WordTimeLimit {
+			g.finish(false) // 超时，节奏失败
+			return
+		}
+	}
+
 	// Handle based on game mode
 	if g.Mode == ModeSentence {
 		// Sentence mode: accept all printable characters
@@ -402,11 +527,94 @@ func (g *Game) TryEliminate() {
 			g.Stats.AddCompletedWord(len(g.Words[i].Text))
 			g.InputBuffer = ""
 
+			// 新增：模式特定的完成后处理
+			switch g.Mode {
+			case ModeCountdown:
+				// 动态补充单词
+				remainingWords := 0
+				for _, w := range g.Words {
+					if !w.Completed {
+						remainingWords++
+					}
+				}
+				if remainingWords < 10 {
+					// 剩余单词少于10个，生成20个新词
+					newWords := g.generateWordsFromMultiPools(20)
+					g.Words = append(g.Words, newWords...)
+				}
+
+			case ModeSpeedRun:
+				// 检查是否全部完成
+				if g.isAllCompleted() {
+					g.finish(false) // 全部完成，游戏结束
+					return
+				}
+
+			case ModeRhythmMaster:
+				// 增加连击数
+				g.ConsecutiveSuccesses++
+
+				// 根据配置的每级单词数增加难度
+				if g.ConsecutiveSuccesses > 0 && g.ConsecutiveSuccesses%g.RhythmWordsPerLevel == 0 {
+					g.DifficultyLevel++
+					// 减少时间限制，使用配置的步长和最小值
+					newLimit := g.RhythmInitialTimeLimit - float64(g.DifficultyLevel)*g.RhythmDifficultyStep
+					if newLimit < g.RhythmMinTimeLimit {
+						newLimit = g.RhythmMinTimeLimit
+					}
+					g.WordTimeLimit = time.Duration(newLimit * float64(time.Second))
+				}
+
+				// 为下一个单词启动计时器
+				for _, w := range g.Words {
+					if !w.Completed {
+						g.CurrentWordStartTime = time.Now()
+						break
+					}
+				}
+
+				// 动态补充单词
+				remainingWords := 0
+				for _, w := range g.Words {
+					if !w.Completed {
+						remainingWords++
+					}
+				}
+				if remainingWords < 10 {
+					newWords := g.generateWordsFromMultiPools(20)
+					g.Words = append(g.Words, newWords...)
+				}
+			}
+
 			// Check if all completed
-			if g.isAllCompleted() {
+			if g.Mode == ModeClassic && g.isAllCompleted() {
 				g.finish(false)
 			}
 			return
+		}
+	}
+}
+
+// CheckTimeouts 检查模式特定的超时条件
+// 应在主循环的每个tick（100ms）调用
+func (g *Game) CheckTimeouts() {
+	if g.Status != StatusRunning {
+		return
+	}
+
+	switch g.Mode {
+	case ModeCountdown:
+		// 检查倒计时
+		elapsed := time.Since(g.CountdownStartTime)
+		if elapsed >= g.CountdownDuration {
+			g.finish(false) // 时间到
+		}
+
+	case ModeRhythmMaster:
+		// 检查当前活动单词是否超时
+		wordElapsed := time.Since(g.CurrentWordStartTime)
+		if wordElapsed >= g.WordTimeLimit {
+			g.finish(false) // 节奏失败
 		}
 	}
 }

@@ -23,6 +23,18 @@ type Config struct {
 
 	// Sentence mode dictionary path
 	SentenceDictPath string `json:"sentence_dict_path"`
+
+	// Countdown mode settings
+	CountdownDuration int `json:"countdown_duration"` // 倒计时模式时长（秒）
+
+	// Speed Run mode settings
+	SpeedRunWordCount int `json:"speedrun_word_count"` // 极速模式单词数量
+
+	// Rhythm Master mode settings
+	RhythmInitialTimeLimit float64 `json:"rhythm_initial_time_limit"` // 节奏大师初始时间限制（秒）
+	RhythmMinTimeLimit     float64 `json:"rhythm_min_time_limit"`     // 节奏大师最小时间限制（秒）
+	RhythmDifficultyStep   float64 `json:"rhythm_difficulty_step"`    // 节奏大师难度递增步长（秒）
+	RhythmWordsPerLevel    int     `json:"rhythm_words_per_level"`    // 节奏大师每级所需单词数
 }
 
 // DefaultConfig returns default configuration
@@ -36,6 +48,15 @@ func DefaultConfig() *Config {
 		MediumRatio:      50,
 		LongRatio:        20,
 		SentenceDictPath: "data/sentences.txt",
+		// Countdown mode defaults
+		CountdownDuration: 60, // 60秒倒计时
+		// Speed Run mode defaults
+		SpeedRunWordCount: 25, // 25个单词
+		// Rhythm Master mode defaults
+		RhythmInitialTimeLimit: 2.0,  // 初始2秒/词
+		RhythmMinTimeLimit:     0.5,  // 最小0.5秒/词
+		RhythmDifficultyStep:   0.1,  // 每级减少0.1秒
+		RhythmWordsPerLevel:    10,   // 每10个词升级
 	}
 }
 

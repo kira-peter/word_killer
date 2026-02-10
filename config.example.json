@@ -1,0 +1,28 @@
+{
+  "_comment_word_count": "经典模式单词数量 (建议: 20-100)",
+  "word_count": 50,
+
+  "_comment_dict_paths": "词库文件路径",
+  "short_dict_path": "data/google-10000-short.txt",
+  "medium_dict_path": "data/google-10000-medium.txt",
+  "long_dict_path": "data/google-10000-long.txt",
+  "sentence_dict_path": "data/sentences.txt",
+
+  "_comment_ratios": "单词长度配比 (简单:50:40:10, 标准:30:50:20, 困难:10:40:50)",
+  "short_ratio": 30,
+  "medium_ratio": 50,
+  "long_ratio": 20,
+
+  "_comment_countdown": "倒计时模式时长/秒 (休闲:90, 标准:60, 挑战:30)",
+  "countdown_duration": 60,
+
+  "_comment_speedrun": "极速模式单词数 (快速:15, 标准:25, 马拉松:50)",
+  "speedrun_word_count": 25,
+
+  "_comment_rhythm": "节奏大师: 初始时间/秒, 最小时间/秒, 每级减少/秒, 每多少词升级",
+  "_comment_rhythm_values": "新手:(3.0,1.0,0.05,15), 标准:(2.0,0.5,0.1,10), 专家:(1.5,0.3,0.15,5)",
+  "rhythm_initial_time_limit": 2.0,
+  "rhythm_min_time_limit": 0.5,
+  "rhythm_difficulty_step": 0.1,
+  "rhythm_words_per_level": 10
+}
