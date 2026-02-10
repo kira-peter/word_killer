@@ -994,11 +994,11 @@ func RenderCountdownGame(words []WordInfo, highlightedIndices []int, input strin
 			Bold(true)
 	}
 
-	timerDisplay := fmt.Sprintf("⏱  时间: %02d:%02d", timeRemainingInt/60, timeRemainingInt%60)
+	timerDisplay := fmt.Sprintf("⏱  Time: %02d:%02d", timeRemainingInt/60, timeRemainingInt%60)
 	timerRendered := timerStyle.Render(timerDisplay)
 
-	progressStr := fmt.Sprintf("单词: %d", stats.WordsCompleted)
-	speedStr := fmt.Sprintf("速度: %.1f 字母/秒", stats.LettersPerSecond)
+	progressStr := fmt.Sprintf("Words: %d", stats.WordsCompleted)
+	speedStr := fmt.Sprintf("Speed: %.1f letters/s", stats.LettersPerSecond)
 
 	statusLine := fmt.Sprintf("%s  │  %s  │  %s", timerRendered, progressStr, speedStr)
 	statusStyled := headerStyle.Render(statusLine)
@@ -1015,7 +1015,7 @@ func RenderCountdownGame(words []WordInfo, highlightedIndices []int, input strin
 	s.WriteString(inputArea)
 	s.WriteString("\n")
 
-	s.WriteString(hintStyle.Render("  [ESC] 暂停  │  在时间耗尽前消除尽可能多的单词！"))
+	s.WriteString(hintStyle.Render("  [ESC] Pause  │  Eliminate as many words as possible before time runs out!"))
 	s.WriteString("\n")
 
 	return s.String()
@@ -1045,7 +1045,7 @@ func RenderSpeedRunGame(words []WordInfo, highlightedIndices []int, input string
 			remainingWords++
 		}
 	}
-	progressStr := fmt.Sprintf("单词: %d/%d", stats.WordsCompleted, stats.WordsCompleted+remainingWords)
+	progressStr := fmt.Sprintf("Words: %d/%d", stats.WordsCompleted, stats.WordsCompleted+remainingWords)
 
 	// 最佳记录显示
 	var bestDisplay string
@@ -1053,9 +1053,9 @@ func RenderSpeedRunGame(words []WordInfo, highlightedIndices []int, input string
 		bestMinutes := int(bestTime) / 60
 		bestSeconds := int(bestTime) % 60
 		bestMillis := int((bestTime - float64(int(bestTime))) * 1000)
-		bestDisplay = fmt.Sprintf("最佳: %02d:%02d.%03d", bestMinutes, bestSeconds, bestMillis)
+		bestDisplay = fmt.Sprintf("Best: %02d:%02d.%03d", bestMinutes, bestSeconds, bestMillis)
 	} else {
-		bestDisplay = "最佳: --:--:---"
+		bestDisplay = "Best: --:--:---"
 	}
 
 	statusLine := fmt.Sprintf("%s  │  %s  │  %s", timerRendered, progressStr, bestDisplay)
@@ -1074,12 +1074,12 @@ func RenderSpeedRunGame(words []WordInfo, highlightedIndices []int, input string
 	s.WriteString("\n")
 
 	// 当前速度指标
-	speedIndicator := fmt.Sprintf("当前速度: %.2f 词/秒", stats.WordsPerSecond)
+	speedIndicator := fmt.Sprintf("Current Speed: %.2f words/s", stats.WordsPerSecond)
 	speedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
 	s.WriteString(speedStyle.Render("  " + speedIndicator))
 	s.WriteString("\n")
 
-	s.WriteString(hintStyle.Render("  [ESC] 暂停  │  尽快完成所有单词！"))
+	s.WriteString(hintStyle.Render("  [ESC] Pause  │  Complete all words as fast as possible!"))
 	s.WriteString("\n")
 
 	return s.String()
@@ -1095,9 +1095,9 @@ func RenderRhythmMasterGame(words []WordInfo, highlightedIndices []int, input st
 		Foreground(lipgloss.Color("201")).
 		Bold(true)
 
-	comboDisplay := fmt.Sprintf("连击: %d", combo)
-	levelDisplay := fmt.Sprintf("等级: %d", level)
-	speedDisplay := fmt.Sprintf("速度: %.1f 字母/秒", stats.LettersPerSecond)
+	comboDisplay := fmt.Sprintf("Combo: %d", combo)
+	levelDisplay := fmt.Sprintf("Level: %d", level)
+	speedDisplay := fmt.Sprintf("Speed: %.1f letters/s", stats.LettersPerSecond)
 
 	statusLine := fmt.Sprintf("%s  │  %s  │  %s", comboStyle.Render(comboDisplay), levelDisplay, speedDisplay)
 	statusStyled := headerStyle.Render(statusLine)
@@ -1110,7 +1110,7 @@ func RenderRhythmMasterGame(words []WordInfo, highlightedIndices []int, input st
 	s.WriteString("\n")
 
 	// === 时间限制显示 ===
-	timeLimitInfo := fmt.Sprintf("每词时间限制: %.1f秒", wordTimeLimit)
+	timeLimitInfo := fmt.Sprintf("Time Limit per Word: %.1fs", wordTimeLimit)
 	timeLimitStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
 	s.WriteString(inputBoxStyle.Render(timeLimitStyle.Render(timeLimitInfo)))
 	s.WriteString("\n")
@@ -1120,7 +1120,7 @@ func RenderRhythmMasterGame(words []WordInfo, highlightedIndices []int, input st
 	s.WriteString(inputArea)
 	s.WriteString("\n")
 
-	s.WriteString(hintStyle.Render("  [ESC] 暂停  │  在时间限制内完成每个单词！"))
+	s.WriteString(hintStyle.Render("  [ESC] Pause  │  Complete each word within the time limit!"))
 	s.WriteString("\n")
 
 	return s.String()
@@ -1130,12 +1130,12 @@ func RenderRhythmMasterGame(words []WordInfo, highlightedIndices []int, input st
 func renderRhythmWordArea(words []WordInfo, highlightedIndices []int, input string,
 	wordTimeRemaining float64, wordTimeLimit float64) string {
 	if len(words) == 0 {
-		content := statsStyle.Render("所有单词已完成！")
+		content := statsStyle.Render("All words completed!")
 		return wordBoxStyle.Render(content)
 	}
 
 	var wordLines []string
-	wordLines = append(wordLines, titleStyle.Render("单词:"))
+	wordLines = append(wordLines, titleStyle.Render("Words:"))
 	wordLines = append(wordLines, "")
 
 	const maxRows = 10
