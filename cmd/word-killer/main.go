@@ -207,11 +207,6 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.game.Pause()
 		case "enter":
 			m.game.TryEliminate()
-		case " ":
-			// 节奏舞蹈模式的空格键判定
-			if m.game.Mode == game.ModeRhythmDance {
-				m.game.TryRhythmJudgment()
-			}
 		case "backspace":
 			m.game.Backspace()
 		default:
@@ -219,7 +214,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			runes := []rune(msg.String())
 			if len(runes) == 1 {
 				r := runes[0]
-				if m.game.Mode == game.ModeSentence {
+				// 节奏舞蹈模式：空格键触发判定
+				if m.game.Mode == game.ModeRhythmDance && r == ' ' {
+					m.game.TryRhythmJudgment()
+				} else if m.game.Mode == game.ModeSentence {
 					// Sentence mode: accept all printable characters
 					if r >= 32 && r <= 126 {
 						m.game.AddChar(r)
