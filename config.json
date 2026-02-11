@@ -6,5 +6,6 @@
   "sentence_dict_path": "data/sentences.txt",
   "short_ratio": 30,
   "medium_ratio": 50,
-  "long_ratio": 20
+  "long_ratio": 20,
+  "countdown_duration": 60
 }

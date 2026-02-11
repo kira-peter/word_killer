@@ -23,19 +23,23 @@ type Config struct {
 
 	// Sentence mode dictionary path
 	SentenceDictPath string `json:"sentence_dict_path"`
+
+	// Underwater countdown mode settings
+	CountdownDuration int `json:"countdown_duration"` // 倒计时时长（秒），默认60
 }
 
 // DefaultConfig returns default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		WordCount:        20, // default 20 words
-		ShortDictPath:    "data/google-10000-short.txt",
-		MediumDictPath:   "data/google-10000-medium.txt",
-		LongDictPath:     "data/google-10000-long.txt",
-		ShortRatio:       30,
-		MediumRatio:      50,
-		LongRatio:        20,
-		SentenceDictPath: "data/sentences.txt",
+		WordCount:         20, // default 20 words
+		ShortDictPath:     "data/google-10000-short.txt",
+		MediumDictPath:    "data/google-10000-medium.txt",
+		LongDictPath:      "data/google-10000-long.txt",
+		ShortRatio:        30,
+		MediumRatio:       50,
+		LongRatio:         20,
+		SentenceDictPath:  "data/sentences.txt",
+		CountdownDuration: 60, // 默认60秒
 	}
 }
 

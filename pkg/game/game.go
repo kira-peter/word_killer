@@ -27,6 +27,7 @@ type GameMode int
 const (
 	ModeClassic GameMode = iota
 	ModeSentence
+	ModeUnderwaterCountdown
 )
 
 // Word represents a word in the game
@@ -58,6 +59,9 @@ type Game struct {
 	// Sentence mode fields
 	TargetSentence   string
 	sentences        []string
+	// Underwater countdown mode fields
+	UnderwaterState  *UnderwaterState
+	CountdownDuration int  // 从配置读取，默认60秒
 }
 
 // New creates a new game instance
@@ -385,6 +389,28 @@ func (g *Game) TryEliminate() {
 		return
 	}
 
+	if g.Mode == ModeUnderwaterCountdown {
+		// 海底模式：检查是否匹配任何小鱼
+		if g.InputBuffer == "" {
+			return
+		}
+
+		for i := range g.UnderwaterState.Fishes {
+			fish := &g.UnderwaterState.Fishes[i]
+			if !fish.Completed && fish.Word == g.InputBuffer {
+				// 抓到小鱼！
+				fish.Completed = true
+				fish.CompletedAt = time.Now()
+				fish.Glowing = true
+				g.Stats.AddCompletedWord(len(fish.Word))
+				g.Stats.AddCorrectChar() // Enter键计为正确
+				g.InputBuffer = ""
+				return
+			}
+		}
+		return
+	}
+
 	g.Stats.AddKeystroke()
 
 	// Classic mode: eliminate matching word
@@ -545,4 +571,68 @@ func isValidWord(word string) bool {
 	}
 
 	return true
+}
+
+// StartUnderwaterCountdown 启动海底倒计时模式
+func (g *Game) StartUnderwaterCountdown(durationSeconds int) error {
+	g.Status = StatusRunning
+	g.Mode = ModeUnderwaterCountdown
+	g.InputBuffer = ""
+	g.Aborted = false
+	g.Stats.Reset()
+	g.Stats.Start()
+
+	// 初始化海底状态
+	g.UnderwaterState = &UnderwaterState{
+		CountdownStart:   time.Now(),
+		BackgroundFrame:  0,
+		SeaweedPositions: generateSeaweedPositions(),
+		BubbleStreams:    generateBubbleStreams(),
+	}
+
+	// 生成10条小鱼
+	g.UnderwaterState.Fishes = g.GenerateFishes(10)
+	g.CountdownDuration = durationSeconds
+
+	return nil
+}
+
+// UpdateCountdown 更新倒计时
+func (g *Game) UpdateCountdown() {
+	if g.Mode != ModeUnderwaterCountdown || g.UnderwaterState == nil {
+		return
+	}
+
+	elapsed := time.Since(g.UnderwaterState.CountdownStart).Seconds()
+	remaining := float64(g.CountdownDuration) - elapsed
+
+	if remaining <= 0 {
+		g.finish(false) // 时间用尽，游戏结束
+	}
+}
+
+// GetRemainingTime 获取剩余时间（秒）
+func (g *Game) GetRemainingTime() int {
+	if g.UnderwaterState == nil {
+		return 0
+	}
+
+	elapsed := time.Since(g.UnderwaterState.CountdownStart).Seconds()
+	remaining := float64(g.CountdownDuration) - elapsed
+	if remaining < 0 {
+		return 0
+	}
+	return int(remaining)
+}
+
+// GetAvailableWords 获取可用单词列表（用于海底模式生成小鱼）
+func (g *Game) GetAvailableWords() []string {
+	words := make([]string, 0)
+
+	// 从各个单词池收集单词
+	words = append(words, g.shortPool...)
+	words = append(words, g.mediumPool...)
+	words = append(words, g.longPool...)
+
+	return words
 }

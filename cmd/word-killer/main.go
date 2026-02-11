@@ -21,11 +21,12 @@ type model struct {
 	ready            bool
 	showModeSelect   bool // true when showing mode selection screen
 	showAbout        bool // true when showing about page
-	selectedMode     int  // 0=Classic, 1=Sentence
+	selectedMode     int  // 0=Classic, 1=Sentence, 2=Underwater
 	width            int
 	height           int
 	animFrame        int                       // animation frame counter for pause menu
 	welcomeAnimState *ui.WelcomeAnimationState // welcome screen animation state
+	tickCount        int                       // tick 计数器，用于控制游戏逻辑更新频率
 }
 
 func initialModel(cfg *config.Config, g *game.Game) model {
@@ -45,7 +46,7 @@ func (m model) Init() tea.Cmd {
 }
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Millisecond*33, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -61,15 +62,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		// Increment animation frame
+		// Increment tick counter and animation frame (30 FPS)
+		m.tickCount++
 		m.animFrame++
 
-		// Update welcome animation if on welcome screen
-		if !m.ready && !m.showModeSelect && !m.showAbout {
-			ui.UpdateWelcomeAnimation(m.welcomeAnimState)
+		// Update game logic only every 3 ticks (~100ms, 10 updates/second)
+		// This keeps animation speeds the same while rendering at 30 FPS
+		if m.tickCount%3 == 0 {
+			// Update welcome animation if on welcome screen
+			if !m.ready && !m.showModeSelect && !m.showAbout {
+				ui.UpdateWelcomeAnimation(m.welcomeAnimState)
+			}
+
+			// Update underwater animations if in underwater mode
+			if m.ready && m.game.Mode == game.ModeUnderwaterCountdown && m.game.Status == game.StatusRunning {
+				m.game.UpdateFishPositions()
+				m.game.UpdateBackgroundAnimation()
+				m.game.UpdateCountdown()
+			}
 		}
 
-		// Always return tick command to keep animation running
+		// Always return tick command to keep rendering at 30 FPS
 		return m, tickCmd()
 	}
 
@@ -123,12 +136,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if !m.ready && m.showModeSelect {
 		switch msg.String() {
 		case "up", "k":
-			// Move selection up
-			m.selectedMode = (m.selectedMode - 1 + 2) % 2
+			// Move selection up (3 modes)
+			m.selectedMode = (m.selectedMode - 1 + 3) % 3
 			return m, nil
 		case "down", "j":
-			// Move selection down
-			m.selectedMode = (m.selectedMode + 1) % 2
+			// Move selection down (3 modes)
+			m.selectedMode = (m.selectedMode + 1) % 3
 			return m, nil
 		case "enter":
 			// Start game with selected mode
@@ -136,9 +149,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.selectedMode == 0 {
 				// Classic mode
 				err = m.game.Start(m.cfg.WordCount)
-			} else {
+			} else if m.selectedMode == 1 {
 				// Sentence mode
 				err = m.game.StartSentenceMode()
+			} else {
+				// Underwater countdown mode
+				err = m.game.StartUnderwaterCountdown(m.cfg.CountdownDuration)
 			}
 			if err != nil {
 				return m, tea.Quit
@@ -209,6 +225,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Restart - same mode
 				if m.game.Mode == game.ModeSentence {
 					m.game.StartSentenceMode()
+				} else if m.game.Mode == game.ModeUnderwaterCountdown {
+					m.game.StartUnderwaterCountdown(m.cfg.CountdownDuration)
 				} else {
 					m.game.Start(m.cfg.WordCount)
 				}
@@ -241,6 +259,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Restart - same mode
 				if m.game.Mode == game.ModeSentence {
 					m.game.StartSentenceMode()
+				} else if m.game.Mode == game.ModeUnderwaterCountdown {
+					m.game.StartUnderwaterCountdown(m.cfg.CountdownDuration)
 				} else {
 					m.game.Start(m.cfg.WordCount)
 				}
@@ -283,7 +303,10 @@ func (m model) View() string {
 
 	if m.game.Status == game.StatusRunning {
 		// Render based on game mode
-		if m.game.Mode == game.ModeSentence {
+		if m.game.Mode == game.ModeUnderwaterCountdown {
+			// Underwater countdown mode rendering
+			return ui.RenderUnderwaterGame(m.game)
+		} else if m.game.Mode == game.ModeSentence {
 			// Sentence mode rendering
 			stats := ui.GameStats{
 				TotalKeystrokes:  m.game.Stats.TotalKeystrokes,

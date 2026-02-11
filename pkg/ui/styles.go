@@ -751,8 +751,8 @@ func renderModeSelectionContent(selectedMode int, animFrame int) string {
 	lines = append(lines, "")
 	lines = append(lines, "")
 
-	// Menu options
-	options := []string{"Classic Mode", "Sentence Mode"}
+	// Menu options (3 modes now)
+	options := []string{"Classic Mode", "Sentence Mode", "Underwater Countdown"}
 	selectedStyle := lipgloss.NewStyle().Foreground(getRandomMenuColor(animFrame)).Bold(true)
 
 	for i, opt := range options {
