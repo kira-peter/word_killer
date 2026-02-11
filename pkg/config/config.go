@@ -24,8 +24,8 @@ type Config struct {
 	// Sentence mode dictionary path
 	SentenceDictPath string `json:"sentence_dict_path"`
 
-	// Countdown mode settings
-	CountdownDuration int `json:"countdown_duration"` // 倒计时模式时长（秒）
+	// Time-challenge mode settings
+	CountdownDuration int `json:"countdown_duration"` // 倒计时模式时长（秒），默认60
 
 	// Speed Run mode settings
 	SpeedRunWordCount int `json:"speedrun_word_count"` // 极速模式单词数量
@@ -48,8 +48,8 @@ func DefaultConfig() *Config {
 		MediumRatio:      50,
 		LongRatio:        20,
 		SentenceDictPath: "data/sentences.txt",
-		// Countdown mode defaults
-		CountdownDuration: 60, // 60秒倒计时
+		// Time-challenge mode defaults
+		CountdownDuration: 60, // 默认60秒
 		// Speed Run mode defaults
 		SpeedRunWordCount: 25, // 25个单词
 		// Rhythm Master mode defaults
