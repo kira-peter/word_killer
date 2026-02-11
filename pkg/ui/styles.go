@@ -750,7 +750,7 @@ func renderModeSelectionContent(selectedMode int, animFrame int) string {
 
 	lines = append(lines, "")
 
-	// Menu options - 现在有6个模式
+	// Menu options - 现在有7个模式
 	options := []string{
 		"Classic Mode",
 		"Sentence Mode",
@@ -758,6 +758,7 @@ func renderModeSelectionContent(selectedMode int, animFrame int) string {
 		"Speed Run Mode",
 		"Rhythm Master",
 		"Underwater Countdown",
+		"Rhythm Dance",
 	}
 	selectedStyle := lipgloss.NewStyle().Foreground(getRandomMenuColor(animFrame)).Bold(true)
 

@@ -22,7 +22,7 @@ type model struct {
 	ready            bool
 	showModeSelect   bool // true when showing mode selection screen
 	showAbout        bool // true when showing about page
-	selectedMode     int  // 0=经典, 1=句子, 2=倒计时, 3=极速, 4=节奏大师, 5=水下倒计时
+	selectedMode     int  // 0=经典, 1=句子, 2=倒计时, 3=极速, 4=节奏大师, 5=水下倒计时, 6=节奏舞蹈
 	width            int
 	height           int
 	animFrame        int                       // animation frame counter for pause menu
@@ -82,6 +82,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.game.UpdateFishPositions()
 				m.game.UpdateBackgroundAnimation()
 				m.game.UpdateCountdown()
+			}
+
+			// Update rhythm dance animations if in rhythm dance mode
+			if m.ready && m.game.Mode == game.ModeRhythmDance && m.game.Status == game.StatusRunning {
+				m.game.UpdateRhythmPointer()
+				m.game.UpdateDanceAnimation()
 			}
 		}
 
@@ -144,12 +150,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if !m.ready && m.showModeSelect {
 		switch msg.String() {
 		case "up", "k":
-			// Move selection up（现在有6个模式）
-			m.selectedMode = (m.selectedMode - 1 + 6) % 6
+			// Move selection up（现在有7个模式）
+			m.selectedMode = (m.selectedMode - 1 + 7) % 7
 			return m, nil
 		case "down", "j":
 			// Move selection down
-			m.selectedMode = (m.selectedMode + 1) % 6
+			m.selectedMode = (m.selectedMode + 1) % 7
 			return m, nil
 		case "enter":
 			// Start game with selected mode
@@ -175,6 +181,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			case 5:
 				// 水下倒计时模式
 				err = m.game.StartUnderwaterCountdown(m.cfg.CountdownDuration)
+			case 6:
+				// 节奏舞蹈模式
+				err = m.game.StartRhythmDanceMode(m.cfg.RhythmDanceDuration)
 			}
 			if err != nil {
 				return m, tea.Quit
@@ -198,6 +207,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.game.Pause()
 		case "enter":
 			m.game.TryEliminate()
+		case " ":
+			// 节奏舞蹈模式的空格键判定
+			if m.game.Mode == game.ModeRhythmDance {
+				m.game.TryRhythmJudgment()
+			}
 		case "backspace":
 			m.game.Backspace()
 		default:
@@ -254,6 +268,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.game.StartRhythmMasterMode()
 				case game.ModeUnderwaterCountdown:
 					m.game.StartUnderwaterCountdown(m.cfg.CountdownDuration)
+				case game.ModeRhythmDance:
+					m.game.StartRhythmDanceMode(m.cfg.RhythmDanceDuration)
 				default:
 					m.game.Start(m.cfg.WordCount)
 				}
@@ -295,6 +311,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.game.StartRhythmMasterMode()
 				case game.ModeUnderwaterCountdown:
 					m.game.StartUnderwaterCountdown(m.cfg.CountdownDuration)
+				case game.ModeRhythmDance:
+					m.game.StartRhythmDanceMode(m.cfg.RhythmDanceDuration)
 				default:
 					m.game.Start(m.cfg.WordCount)
 				}
@@ -448,6 +466,45 @@ func (m model) View() string {
 				wordRemainingSec, m.game.WordTimeLimit.Seconds(),
 				m.game.ConsecutiveSuccesses, m.game.DifficultyLevel)
 
+		case game.ModeRhythmDance:
+			// 节奏舞蹈模式渲染
+			if m.game.RhythmDanceState == nil {
+				return "Rhythm Dance mode not initialized"
+			}
+			state := m.game.RhythmDanceState
+
+			// 获取舞蹈帧
+			danceFrame := m.game.GetCurrentDanceFrame()
+
+			// 构建节奏条信息
+			rhythmBar := ui.RhythmBarInfo{
+				PointerPosition: state.PointerPosition,
+				GoldenRatio:     state.GoldenRatio,
+			}
+
+			// 构建统计信息
+			stats := ui.RhythmDanceStats{
+				RemainingTime:  m.game.GetRhythmRemainingTime(),
+				CompletedWords: state.CompletedWords,
+				TotalScore:     state.TotalScore,
+				CurrentCombo:   state.CurrentCombo,
+			}
+
+			// 构建判定特效信息
+			judgmentEffect := ui.JudgmentEffectInfo{
+				LastJudgment:     state.LastJudgment,
+				LastJudgmentTime: state.LastJudgmentTime,
+			}
+
+			return ui.RenderRhythmDanceGame(
+				danceFrame,
+				state.CurrentWord,
+				m.game.InputBuffer,
+				rhythmBar,
+				stats,
+				judgmentEffect,
+			)
+
 		default:
 			// Classic mode rendering (existing code)
 			// Get all words (including completed ones)
@@ -514,6 +571,23 @@ func (m model) View() string {
 				saveSpeedRunBestTime(completionTime)
 				m.speedRunBestTime = completionTime
 			}
+		}
+
+		// 如果是节奏舞蹈模式，渲染专用结果界面
+		if m.game.Mode == game.ModeRhythmDance && m.game.RhythmDanceState != nil {
+			state := m.game.RhythmDanceState
+			rhythmStats := ui.RhythmDanceStats{
+				RemainingTime:  0, // 已结束
+				CompletedWords: state.CompletedWords,
+				TotalScore:     state.TotalScore,
+				CurrentCombo:   state.CurrentCombo,
+				MaxCombo:       state.MaxCombo,
+				PerfectCount:   state.PerfectCount,
+				NiceCount:      state.NiceCount,
+				OKCount:        state.OKCount,
+				MissCount:      state.MissCount,
+			}
+			return ui.RenderRhythmDanceResults(rhythmStats, m.game.ResultsMenuIndex, m.animFrame)
 		}
 
 		return ui.RenderResults(stats, m.game.Aborted, m.game.ResultsMenuIndex, m.animFrame)

@@ -21,7 +21,22 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: 修复暂停页面高度和单词区域固定行数\n\n修复内容：\n\n1️⃣ 单词区域固定高度\n   - 最大显示 10 行单词\n   - 不足 10 行用空行填充\n   - 超过限制的单词不显示\n   - 确保高度始终一致\n\n2️⃣ 暂停页面高度统一\n   - 固定 12 行内容（标题 + 空行 + 10内容行）\n   - 与单词区域高度完全一致\n   - 避免暂停时界面高度跳变\n\n3️⃣ 布局细节\n   - 单词区域：Words: + 空行 + 10行单词 = 12行\n   - 暂停区域：Pause Menu: + 空行 + 滚动框 + 菜单 + 填充 = 12行\n   - wordBoxStyle 应用相同边框和内边距\n\n效果：\n✅ 游戏和暂停界面高度完全一致\n✅ 切换时无界面跳动\n✅ 滚动动画流畅显示\n✅ 整体更加专业整齐\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(wc:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: add word difficulty control with configurable ratios\n\n实现了基于单词难度的随机比例控制功能,允许用户通过配置文件自定义不同难度单词的出现比例。\n\n主要变更:\n- 配置系统:添加三个难度词库路径配置和比例配置字段\n- 比例归一化:支持任意正数比例,自动归一化为百分比\n- 多词库支持:同时加载 short/medium/long 三个难度词库\n- 智能单词生成:按配置比例从不同难度池中随机选择单词\n- 跨词库去重:确保游戏中不会出现重复单词\n\n配置示例:\n{\n  \"short_ratio\": 30,\n  \"medium_ratio\": 50,\n  \"long_ratio\": 20\n}\n\n受影响文件:\n- pkg/config/config.go: 添加难度配置和归一化方法\n- pkg/game/game.go: 支持多词库加载和按比例生成单词\n- cmd/word-killer/main.go: 使用新的词库加载 API\n- config.json: 添加默认难度配置\n- data/: 添加三个难度级别的单词文件\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npx openspec validate add-welcome-title-animation --strict --no-interactive)",
+      "Bash(timeout:*)",
+      "Bash(bin/word-killer.exe)",
+      "Bash(ls:*)",
+      "Bash(cd:*)",
+      "Bash(test_unicode.go << 'EOF'\npackage main\n\nimport \"fmt\"\n\nfunc main\\(\\) {\n    leftHead := \"◀□\"\n    rightHead := \"▷-\"\n    leftTail := \"-◁\"\n    rightTail := \"□▶\"\n    \n    fmt.Printf\\(\"leftHead runes: %d, bytes: %d\\\\n\", len\\([]rune\\(leftHead\\)\\), len\\(leftHead\\)\\)\n    fmt.Printf\\(\"rightHead runes: %d, bytes: %d\\\\n\", len\\([]rune\\(rightHead\\)\\), len\\(rightHead\\)\\)\n    fmt.Printf\\(\"leftTail runes: %d, bytes: %d\\\\n\", len\\([]rune\\(leftTail\\)\\), len\\(leftTail\\)\\)\n    fmt.Printf\\(\"rightTail runes: %d, bytes: %d\\\\n\", len\\([]rune\\(rightTail\\)\\), len\\(rightTail\\)\\)\n    \n    for i, r := range leftHead {\n        fmt.Printf\\(\"leftHead[%d] = %c \\(U+%04X\\)\\\\n\", i, r, r\\)\n    }\n}\nEOF)",
+      "Bash(debug_fish.go << 'EOF'\npackage main\n\nimport \"fmt\"\n\nfunc main\\(\\) {\n    // 模拟小鱼渲染\n    word := \"hello\"\n    \n    // 向右：▷-word□▶\n    fmt.Println\\(\"Right fish:\"\\)\n    right := \"▷-\" + word + \"□▶\"\n    for i, r := range right {\n        fmt.Printf\\(\"[%d]=%c \", i, r\\)\n    }\n    fmt.Println\\(\\)\n    \n    // 向左：◀□word-◁\n    fmt.Println\\(\"\\\\nLeft fish:\"\\)\n    left := \"◀□\" + word + \"-◁\"\n    for i, r := range left {\n        fmt.Printf\\(\"[%d]=%c \", i, r\\)\n    }\n    fmt.Println\\(\\)\n    \n    // 检查长度\n    fmt.Printf\\(\"\\\\nRight runes: %d \\(should be %d\\)\\\\n\", len\\([]rune\\(right\\)\\), 2+len\\(word\\)+2\\)\n    fmt.Printf\\(\"Left runes: %d \\(should be %d\\)\\\\n\", len\\([]rune\\(left\\)\\), 2+len\\(word\\)+2\\)\n}\nEOF)",
+      "Bash(git pull:*)",
+      "Bash(openspec archive add-classic-game-mode:*)",
+      "Bash(openspec archive add-word-difficulty-control:*)",
+      "Bash(openspec archive add-welcome-title-animation:*)",
+      "Bash(openspec archive add-sentence-typing-mode:*)",
+      "Bash(.word-killer.exe)",
+      "Bash(./word-killer.exe:*)",
+      "Bash(go test:*)"
     ]
   }
 }

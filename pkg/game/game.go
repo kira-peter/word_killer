@@ -31,6 +31,7 @@ const (
 	ModeSpeedRun            // 极速模式 - 固定25词
 	ModeRhythmMaster        // 节奏大师 - 每词限时
 	ModeUnderwaterCountdown // 水下倒计时模式
+	ModeRhythmDance         // 节奏舞蹈模式 - 打字+节奏判定
 )
 
 // Word represents a word in the game
@@ -86,6 +87,9 @@ type Game struct {
 	// Underwater countdown mode fields
 	UnderwaterState       *UnderwaterState
 	CountdownDurationSecs int // 从配置读取，默认60秒
+
+	// Rhythm Dance mode fields
+	RhythmDanceState *RhythmDanceState
 }
 
 // New creates a new game instance
@@ -472,6 +476,22 @@ func (g *Game) AddChar(ch rune) {
 			// Check if sentence is completed
 			if len(g.InputBuffer) == len(g.TargetSentence) {
 				// Sentence completed, but don't finish until Enter is pressed
+			}
+		}
+	} else if g.Mode == ModeRhythmDance {
+		// Rhythm Dance mode: 只接受字母，检查是否匹配当前单词
+		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
+			g.InputBuffer += string(ch)
+			g.Stats.AddKeystroke()
+
+			// 检查是否匹配当前单词
+			if g.RhythmDanceState != nil {
+				currentWord := g.RhythmDanceState.CurrentWord
+				if len(g.InputBuffer) <= len(currentWord) &&
+					strings.HasPrefix(currentWord, g.InputBuffer) {
+					g.Stats.AddValidKeystroke()
+					g.Stats.AddCorrectChar()
+				}
 			}
 		}
 	} else {
