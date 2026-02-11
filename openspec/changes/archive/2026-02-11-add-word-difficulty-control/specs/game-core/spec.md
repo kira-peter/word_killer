@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: Word Dictionary Loading
+### Requirement: Word Pool Management
 游戏 SHALL 支持加载多个难度级别的单词词库,并根据配置的比例从不同难度池中随机选择单词。
 
 #### Scenario: Load multiple difficulty dictionaries
