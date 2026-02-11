@@ -7,5 +7,10 @@
   "short_ratio": 30,
   "medium_ratio": 50,
   "long_ratio": 20,
-  "countdown_duration": 60
+  "countdown_duration": 60,
+  "speedrun_word_count": 25,
+  "rhythm_initial_time_limit": 4.0,
+  "rhythm_min_time_limit": 0.5,
+  "rhythm_difficulty_step": 0.1,
+  "rhythm_words_per_level": 10
 }

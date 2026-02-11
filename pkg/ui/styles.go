@@ -749,10 +749,16 @@ func renderModeSelectionContent(selectedMode int, animFrame int) string {
 	var lines []string
 
 	lines = append(lines, "")
-	lines = append(lines, "")
 
-	// Menu options (3 modes now)
-	options := []string{"Classic Mode", "Sentence Mode", "Underwater Countdown"}
+	// Menu options - 现在有6个模式
+	options := []string{
+		"Classic Mode",
+		"Sentence Mode",
+		"Countdown Mode",
+		"Speed Run Mode",
+		"Rhythm Master",
+		"Underwater Countdown",
+	}
 	selectedStyle := lipgloss.NewStyle().Foreground(getRandomMenuColor(animFrame)).Bold(true)
 
 	for i, opt := range options {
@@ -778,8 +784,8 @@ func renderModeSelectionContent(selectedMode int, animFrame int) string {
 		lines = append(lines, "  "+alignedText)
 	}
 
-	// Fill to fixed height (12 lines)
-	for len(lines) < 12 {
+	// Fill to fixed height (14 lines to accommodate 5 options)
+	for len(lines) < 14 {
 		lines = append(lines, "")
 	}
 
@@ -966,6 +972,287 @@ func renderTaglineExplosion(taglineInfo TaglineInfo) string {
 	}
 
 	return result.String()
+}
+
+// RenderCountdownGame 渲染倒计时模式游戏界面
+func RenderCountdownGame(words []WordInfo, highlightedIndices []int, input string, stats GameStats,
+	timeRemaining float64, totalDuration float64) string {
+	var s strings.Builder
+
+	// === 顶部：倒计时器（大号显示）===
+	timeRemainingInt := int(timeRemaining)
+	var timerStyle lipgloss.Style
+
+	// 小于10秒时显示红色警告
+	if timeRemaining < 10 {
+		timerStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Bold(true).
+			Background(lipgloss.Color("52")) // 深红背景
+	} else {
+		timerStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("46")).
+			Bold(true)
+	}
+
+	timerDisplay := fmt.Sprintf("⏱  Time: %02d:%02d", timeRemainingInt/60, timeRemainingInt%60)
+	timerRendered := timerStyle.Render(timerDisplay)
+
+	progressStr := fmt.Sprintf("Words: %d", stats.WordsCompleted)
+	speedStr := fmt.Sprintf("Speed: %.1f letters/s", stats.LettersPerSecond)
+
+	statusLine := fmt.Sprintf("%s  │  %s  │  %s", timerRendered, progressStr, speedStr)
+	statusStyled := headerStyle.Render(statusLine)
+	s.WriteString(lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Center).Render(statusStyled))
+	s.WriteString("\n")
+
+	// === 中部：单词区域（复用现有渲染）===
+	wordArea := renderWordArea(words, highlightedIndices, input)
+	s.WriteString(wordArea)
+	s.WriteString("\n")
+
+	// === 底部：输入区域 ===
+	inputArea := renderInputArea(input)
+	s.WriteString(inputArea)
+	s.WriteString("\n")
+
+	s.WriteString(hintStyle.Render("  [ESC] Pause  │  Eliminate as many words as possible before time runs out!"))
+	s.WriteString("\n")
+
+	return s.String()
+}
+
+// RenderSpeedRunGame 渲染极速模式游戏界面
+func RenderSpeedRunGame(words []WordInfo, highlightedIndices []int, input string, stats GameStats,
+	currentTime float64, bestTime float64) string {
+	var s strings.Builder
+
+	// === 顶部：毫秒级计时器 ===
+	timerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("226")).
+		Bold(true)
+
+	// 格式：MM:SS.mmm
+	minutes := int(currentTime) / 60
+	seconds := int(currentTime) % 60
+	milliseconds := int((currentTime - float64(int(currentTime))) * 1000)
+	timerDisplay := fmt.Sprintf("⏱  %02d:%02d.%03d", minutes, seconds, milliseconds)
+	timerRendered := timerStyle.Render(timerDisplay)
+
+	// 计算剩余单词数
+	remainingWords := 0
+	for _, w := range words {
+		if !w.Completed {
+			remainingWords++
+		}
+	}
+	progressStr := fmt.Sprintf("Words: %d/%d", stats.WordsCompleted, stats.WordsCompleted+remainingWords)
+
+	// 最佳记录显示
+	var bestDisplay string
+	if bestTime > 0 {
+		bestMinutes := int(bestTime) / 60
+		bestSeconds := int(bestTime) % 60
+		bestMillis := int((bestTime - float64(int(bestTime))) * 1000)
+		bestDisplay = fmt.Sprintf("Best: %02d:%02d.%03d", bestMinutes, bestSeconds, bestMillis)
+	} else {
+		bestDisplay = "Best: --:--:---"
+	}
+
+	statusLine := fmt.Sprintf("%s  │  %s  │  %s", timerRendered, progressStr, bestDisplay)
+	statusStyled := headerStyle.Render(statusLine)
+	s.WriteString(lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Center).Render(statusStyled))
+	s.WriteString("\n")
+
+	// === 中部：单词区域 ===
+	wordArea := renderWordArea(words, highlightedIndices, input)
+	s.WriteString(wordArea)
+	s.WriteString("\n")
+
+	// === 底部：输入 + 速度指标 ===
+	inputArea := renderInputArea(input)
+	s.WriteString(inputArea)
+	s.WriteString("\n")
+
+	// 当前速度指标
+	speedIndicator := fmt.Sprintf("Current Speed: %.2f words/s", stats.WordsPerSecond)
+	speedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
+	s.WriteString(speedStyle.Render("  " + speedIndicator))
+	s.WriteString("\n")
+
+	s.WriteString(hintStyle.Render("  [ESC] Pause  │  Complete all words as fast as possible!"))
+	s.WriteString("\n")
+
+	return s.String()
+}
+
+// RenderRhythmMasterGame 渲染节奏大师模式游戏界面
+func RenderRhythmMasterGame(words []WordInfo, highlightedIndices []int, input string, stats GameStats,
+	wordTimeRemaining float64, wordTimeLimit float64, combo int, level int) string {
+	var s strings.Builder
+
+	// === 顶部：连击和等级显示 ===
+	comboStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("201")).
+		Bold(true)
+
+	comboDisplay := fmt.Sprintf("Combo: %d", combo)
+	levelDisplay := fmt.Sprintf("Level: %d", level)
+	speedDisplay := fmt.Sprintf("Speed: %.1f letters/s", stats.LettersPerSecond)
+
+	statusLine := fmt.Sprintf("%s  │  %s  │  %s", comboStyle.Render(comboDisplay), levelDisplay, speedDisplay)
+	statusStyled := headerStyle.Render(statusLine)
+	s.WriteString(lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Center).Render(statusStyled))
+	s.WriteString("\n")
+
+	// === 中部：带进度条的单词区域 ===
+	wordArea := renderRhythmWordArea(words, highlightedIndices, input, wordTimeRemaining, wordTimeLimit)
+	s.WriteString(wordArea)
+	s.WriteString("\n")
+
+	// === 时间限制显示 ===
+	timeLimitInfo := fmt.Sprintf("Time Limit per Word: %.1fs", wordTimeLimit)
+	timeLimitStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
+	s.WriteString(inputBoxStyle.Render(timeLimitStyle.Render(timeLimitInfo)))
+	s.WriteString("\n")
+
+	// === 底部：输入区域 ===
+	inputArea := renderInputArea(input)
+	s.WriteString(inputArea)
+	s.WriteString("\n")
+
+	s.WriteString(hintStyle.Render("  [ESC] Pause  │  Complete each word within the time limit!"))
+	s.WriteString("\n")
+
+	return s.String()
+}
+
+// renderRhythmWordArea 渲染带进度条的单词区域（节奏大师专用）
+func renderRhythmWordArea(words []WordInfo, highlightedIndices []int, input string,
+	wordTimeRemaining float64, wordTimeLimit float64) string {
+	if len(words) == 0 {
+		content := statsStyle.Render("All words completed!")
+		return wordBoxStyle.Render(content)
+	}
+
+	var wordLines []string
+	wordLines = append(wordLines, titleStyle.Render("Words:"))
+	wordLines = append(wordLines, "")
+
+	const maxRows = 10
+	const wordColumnWidth = 18
+
+	availableWidth := contentWidth - 8
+	wordsPerRow := availableWidth / wordColumnWidth
+	if wordsPerRow < 1 {
+		wordsPerRow = 1
+	}
+
+	maxWordsToDisplay := maxRows * wordsPerRow
+	displayCount := len(words)
+	if displayCount > maxWordsToDisplay {
+		displayCount = maxWordsToDisplay
+	}
+
+	// 找到第一个活动单词（用于显示进度条）
+	firstActiveIdx := -1
+	for i := 0; i < displayCount; i++ {
+		if !words[i].Completed {
+			firstActiveIdx = i
+			break
+		}
+	}
+
+	rowCount := 0
+	for i := 0; i < displayCount; i += wordsPerRow {
+		var rowWords []string
+		for j := 0; j < wordsPerRow; j++ {
+			idx := i + j
+			if idx >= displayCount {
+				rowWords = append(rowWords, strings.Repeat(" ", wordColumnWidth))
+				continue
+			}
+
+			wordInfo := words[idx]
+			isHighlighted := false
+			if !wordInfo.Completed {
+				for _, hIdx := range highlightedIndices {
+					if hIdx == idx {
+						isHighlighted = true
+						break
+					}
+				}
+			}
+
+			var renderedWord string
+
+			if wordInfo.Completed {
+				// 已完成的单词
+				renderedWord = renderCompletedWordAnimation(wordInfo)
+			} else if idx == firstActiveIdx {
+				// 当前活动单词 - 显示进度条
+				if isHighlighted && len(input) > 0 {
+					matchLen := len(input)
+					if matchLen > len(wordInfo.Text) {
+						matchLen = len(wordInfo.Text)
+					}
+					renderedWord = highlightStyle.Render(wordInfo.Text[:matchLen]) +
+						wordStyle.Render(wordInfo.Text[matchLen:])
+				} else {
+					renderedWord = wordStyle.Render(wordInfo.Text)
+				}
+
+				// 添加进度条
+				barWidth := 16
+				progressPercent := wordTimeRemaining / wordTimeLimit
+				if progressPercent < 0 {
+					progressPercent = 0
+				}
+				filledWidth := int(float64(barWidth) * progressPercent)
+
+				// 根据剩余时间设置颜色
+				var barStyle lipgloss.Style
+				if progressPercent < 0.3 {
+					barStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196")) // 红色
+				} else if progressPercent < 0.6 {
+					barStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("226")) // 黄色
+				} else {
+					barStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("46")) // 绿色
+				}
+
+				bar := barStyle.Render(strings.Repeat("█", filledWidth)) +
+					lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(strings.Repeat("░", barWidth-filledWidth))
+
+				renderedWord = renderedWord + "\n  " + bar
+			} else if isHighlighted && len(input) > 0 {
+				// 高亮匹配的单词
+				matchLen := len(input)
+				if matchLen > len(wordInfo.Text) {
+					matchLen = len(wordInfo.Text)
+				}
+				renderedWord = highlightStyle.Render(wordInfo.Text[:matchLen]) +
+					wordStyle.Render(wordInfo.Text[matchLen:])
+			} else {
+				// 普通未完成单词
+				renderedWord = wordStyle.Render(wordInfo.Text)
+			}
+
+			paddedWord := padToWidth(wordInfo.Text, renderedWord, wordColumnWidth)
+			rowWords = append(rowWords, paddedWord)
+		}
+		wordLines = append(wordLines, "  "+strings.Join(rowWords, ""))
+		rowCount++
+	}
+
+	// 填充到固定高度
+	for rowCount < maxRows {
+		emptyRow := "  " + strings.Repeat(" ", wordsPerRow*wordColumnWidth)
+		wordLines = append(wordLines, emptyRow)
+		rowCount++
+	}
+
+	content := strings.Join(wordLines, "\n")
+	return wordBoxStyle.Render(content)
 }
 
 // RenderAbout renders the about page with game information

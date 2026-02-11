@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -21,12 +22,14 @@ type model struct {
 	ready            bool
 	showModeSelect   bool // true when showing mode selection screen
 	showAbout        bool // true when showing about page
-	selectedMode     int  // 0=Classic, 1=Sentence, 2=Underwater
+	selectedMode     int  // 0=经典, 1=句子, 2=倒计时, 3=极速, 4=节奏大师, 5=水下倒计时
 	width            int
 	height           int
 	animFrame        int                       // animation frame counter for pause menu
 	welcomeAnimState *ui.WelcomeAnimationState // welcome screen animation state
-	tickCount        int                       // tick 计数器，用于控制游戏逻辑更新频率
+	// 极速模式专用
+	speedRunBestTime float64 // 最佳时间（秒），从文件加载
+	tickCount        int     // tick 计数器，用于控制游戏逻辑更新频率
 }
 
 func initialModel(cfg *config.Config, g *game.Game) model {
@@ -82,7 +85,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Always return tick command to keep rendering at 30 FPS
+		// 新增：检查时间模式的超时条件
+		if m.ready && m.game.Status == game.StatusRunning {
+			m.game.CheckTimeouts()
+		}
+
+		// Always return tick command to keep animation running at 30 FPS
 		return m, tickCmd()
 	}
 
@@ -136,24 +144,36 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if !m.ready && m.showModeSelect {
 		switch msg.String() {
 		case "up", "k":
-			// Move selection up (3 modes)
-			m.selectedMode = (m.selectedMode - 1 + 3) % 3
+			// Move selection up（现在有6个模式）
+			m.selectedMode = (m.selectedMode - 1 + 6) % 6
 			return m, nil
 		case "down", "j":
-			// Move selection down (3 modes)
-			m.selectedMode = (m.selectedMode + 1) % 3
+			// Move selection down
+			m.selectedMode = (m.selectedMode + 1) % 6
 			return m, nil
 		case "enter":
 			// Start game with selected mode
 			var err error
-			if m.selectedMode == 0 {
-				// Classic mode
+			switch m.selectedMode {
+			case 0:
+				// 经典模式
 				err = m.game.Start(m.cfg.WordCount)
-			} else if m.selectedMode == 1 {
-				// Sentence mode
+			case 1:
+				// 句子模式
 				err = m.game.StartSentenceMode()
-			} else {
-				// Underwater countdown mode
+			case 2:
+				// 倒计时模式 - 从配置读取时长
+				err = m.game.StartCountdownMode(time.Duration(m.cfg.CountdownDuration) * time.Second)
+			case 3:
+				// 极速模式 - 从配置读取单词数
+				err = m.game.StartSpeedRunMode(m.cfg.SpeedRunWordCount)
+				// 加载最佳时间记录
+				m.speedRunBestTime = loadSpeedRunBestTime()
+			case 4:
+				// 节奏大师模式
+				err = m.game.StartRhythmMasterMode()
+			case 5:
+				// 水下倒计时模式
 				err = m.game.StartUnderwaterCountdown(m.cfg.CountdownDuration)
 			}
 			if err != nil {
@@ -223,11 +243,18 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.game.Resume()
 			} else if idx == 1 {
 				// Restart - same mode
-				if m.game.Mode == game.ModeSentence {
+				switch m.game.Mode {
+				case game.ModeSentence:
 					m.game.StartSentenceMode()
-				} else if m.game.Mode == game.ModeUnderwaterCountdown {
+				case game.ModeCountdown:
+					m.game.StartCountdownMode(time.Duration(m.cfg.CountdownDuration) * time.Second)
+				case game.ModeSpeedRun:
+					m.game.StartSpeedRunMode(m.cfg.SpeedRunWordCount)
+				case game.ModeRhythmMaster:
+					m.game.StartRhythmMasterMode()
+				case game.ModeUnderwaterCountdown:
 					m.game.StartUnderwaterCountdown(m.cfg.CountdownDuration)
-				} else {
+				default:
 					m.game.Start(m.cfg.WordCount)
 				}
 			} else if idx == 2 {
@@ -257,11 +284,18 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			idx := m.game.ResultsMenuIndex
 			if idx == 0 {
 				// Restart - same mode
-				if m.game.Mode == game.ModeSentence {
+				switch m.game.Mode {
+				case game.ModeSentence:
 					m.game.StartSentenceMode()
-				} else if m.game.Mode == game.ModeUnderwaterCountdown {
+				case game.ModeCountdown:
+					m.game.StartCountdownMode(time.Duration(m.cfg.CountdownDuration) * time.Second)
+				case game.ModeSpeedRun:
+					m.game.StartSpeedRunMode(m.cfg.SpeedRunWordCount)
+				case game.ModeRhythmMaster:
+					m.game.StartRhythmMasterMode()
+				case game.ModeUnderwaterCountdown:
 					m.game.StartUnderwaterCountdown(m.cfg.CountdownDuration)
-				} else {
+				default:
 					m.game.Start(m.cfg.WordCount)
 				}
 			} else if idx == 1 {
@@ -303,10 +337,11 @@ func (m model) View() string {
 
 	if m.game.Status == game.StatusRunning {
 		// Render based on game mode
-		if m.game.Mode == game.ModeUnderwaterCountdown {
+		switch m.game.Mode {
+		case game.ModeUnderwaterCountdown:
 			// Underwater countdown mode rendering
 			return ui.RenderUnderwaterGame(m.game)
-		} else if m.game.Mode == game.ModeSentence {
+		case game.ModeSentence:
 			// Sentence mode rendering
 			stats := ui.GameStats{
 				TotalKeystrokes:  m.game.Stats.TotalKeystrokes,
@@ -320,36 +355,129 @@ func (m model) View() string {
 				AccuracyPercent:  m.game.Stats.GetAccuracyPercent(),
 			}
 			return ui.RenderSentenceGame(m.game.TargetSentence, m.game.InputBuffer, stats)
-		}
 
-		// Classic mode rendering (existing code)
-		// Get all words (including completed ones)
-		allWords := m.game.GetAllWords()
-		wordInfos := make([]ui.WordInfo, len(allWords))
-		for i, w := range allWords {
-			wordInfos[i] = ui.WordInfo{
-				Text:        w.Text,
-				Completed:   w.Completed,
-				CompletedAt: w.CompletedAt,
+		case game.ModeCountdown:
+			// 倒计时模式渲染
+			allWords := m.game.GetAllWords()
+			wordInfos := make([]ui.WordInfo, len(allWords))
+			for i, w := range allWords {
+				wordInfos[i] = ui.WordInfo{
+					Text:        w.Text,
+					Completed:   w.Completed,
+					CompletedAt: w.CompletedAt,
+				}
 			}
+			highlighted := m.game.GetMatchedIndices()
+			stats := ui.GameStats{
+				TotalKeystrokes:  m.game.Stats.TotalKeystrokes,
+				ValidKeystrokes:  m.game.Stats.ValidKeystrokes,
+				CorrectChars:     m.game.Stats.CorrectChars,
+				WordsCompleted:   m.game.Stats.WordsCompleted,
+				TotalLetters:     m.game.Stats.TotalLetters,
+				ElapsedSeconds:   m.game.Stats.GetElapsedSeconds(),
+				LettersPerSecond: m.game.Stats.GetLettersPerSecond(),
+				WordsPerSecond:   m.game.Stats.GetWordsPerSecond(),
+				AccuracyPercent:  m.game.Stats.GetAccuracyPercent(),
+			}
+			elapsed := time.Since(m.game.CountdownStartTime)
+			remaining := m.game.CountdownDuration - elapsed
+			remainingSec := remaining.Seconds()
+			if remainingSec < 0 {
+				remainingSec = 0
+			}
+			return ui.RenderCountdownGame(wordInfos, highlighted, m.game.InputBuffer, stats,
+				remainingSec, m.game.CountdownDuration.Seconds())
+
+		case game.ModeSpeedRun:
+			// 极速模式渲染
+			allWords := m.game.GetAllWords()
+			wordInfos := make([]ui.WordInfo, len(allWords))
+			for i, w := range allWords {
+				wordInfos[i] = ui.WordInfo{
+					Text:        w.Text,
+					Completed:   w.Completed,
+					CompletedAt: w.CompletedAt,
+				}
+			}
+			highlighted := m.game.GetMatchedIndices()
+			stats := ui.GameStats{
+				TotalKeystrokes:  m.game.Stats.TotalKeystrokes,
+				ValidKeystrokes:  m.game.Stats.ValidKeystrokes,
+				CorrectChars:     m.game.Stats.CorrectChars,
+				WordsCompleted:   m.game.Stats.WordsCompleted,
+				TotalLetters:     m.game.Stats.TotalLetters,
+				ElapsedSeconds:   m.game.Stats.GetElapsedSeconds(),
+				LettersPerSecond: m.game.Stats.GetLettersPerSecond(),
+				WordsPerSecond:   m.game.Stats.GetWordsPerSecond(),
+				AccuracyPercent:  m.game.Stats.GetAccuracyPercent(),
+			}
+			currentTime := time.Since(m.game.SpeedRunStartTime).Seconds()
+			return ui.RenderSpeedRunGame(wordInfos, highlighted, m.game.InputBuffer, stats,
+				currentTime, m.speedRunBestTime)
+
+		case game.ModeRhythmMaster:
+			// 节奏大师模式渲染
+			allWords := m.game.GetAllWords()
+			wordInfos := make([]ui.WordInfo, len(allWords))
+			for i, w := range allWords {
+				wordInfos[i] = ui.WordInfo{
+					Text:        w.Text,
+					Completed:   w.Completed,
+					CompletedAt: w.CompletedAt,
+				}
+			}
+			highlighted := m.game.GetMatchedIndices()
+			stats := ui.GameStats{
+				TotalKeystrokes:  m.game.Stats.TotalKeystrokes,
+				ValidKeystrokes:  m.game.Stats.ValidKeystrokes,
+				CorrectChars:     m.game.Stats.CorrectChars,
+				WordsCompleted:   m.game.Stats.WordsCompleted,
+				TotalLetters:     m.game.Stats.TotalLetters,
+				ElapsedSeconds:   m.game.Stats.GetElapsedSeconds(),
+				LettersPerSecond: m.game.Stats.GetLettersPerSecond(),
+				WordsPerSecond:   m.game.Stats.GetWordsPerSecond(),
+				AccuracyPercent:  m.game.Stats.GetAccuracyPercent(),
+			}
+			wordElapsed := time.Since(m.game.CurrentWordStartTime)
+			wordRemaining := m.game.WordTimeLimit - wordElapsed
+			wordRemainingSec := wordRemaining.Seconds()
+			if wordRemainingSec < 0 {
+				wordRemainingSec = 0
+			}
+			return ui.RenderRhythmMasterGame(wordInfos, highlighted, m.game.InputBuffer, stats,
+				wordRemainingSec, m.game.WordTimeLimit.Seconds(),
+				m.game.ConsecutiveSuccesses, m.game.DifficultyLevel)
+
+		default:
+			// Classic mode rendering (existing code)
+			// Get all words (including completed ones)
+			allWords := m.game.GetAllWords()
+			wordInfos := make([]ui.WordInfo, len(allWords))
+			for i, w := range allWords {
+				wordInfos[i] = ui.WordInfo{
+					Text:        w.Text,
+					Completed:   w.Completed,
+					CompletedAt: w.CompletedAt,
+				}
+			}
+
+			highlighted := m.game.GetMatchedIndices()
+			activeWords := m.game.GetActiveWords()
+
+			stats := ui.GameStats{
+				TotalKeystrokes:  m.game.Stats.TotalKeystrokes,
+				ValidKeystrokes:  m.game.Stats.ValidKeystrokes,
+				CorrectChars:     m.game.Stats.CorrectChars,
+				WordsCompleted:   m.game.Stats.WordsCompleted,
+				TotalLetters:     m.game.Stats.TotalLetters,
+				ElapsedSeconds:   m.game.Stats.GetElapsedSeconds(),
+				LettersPerSecond: m.game.Stats.GetLettersPerSecond(),
+				WordsPerSecond:   m.game.Stats.GetWordsPerSecond(),
+				AccuracyPercent:  m.game.Stats.GetAccuracyPercent(),
+			}
+
+			return ui.RenderGame(wordInfos, highlighted, m.game.InputBuffer, stats, len(activeWords))
 		}
-
-		highlighted := m.game.GetMatchedIndices()
-		activeWords := m.game.GetActiveWords()
-
-		stats := ui.GameStats{
-			TotalKeystrokes:  m.game.Stats.TotalKeystrokes,
-			ValidKeystrokes:  m.game.Stats.ValidKeystrokes,
-			CorrectChars:     m.game.Stats.CorrectChars,
-			WordsCompleted:   m.game.Stats.WordsCompleted,
-			TotalLetters:     m.game.Stats.TotalLetters,
-			ElapsedSeconds:   m.game.Stats.GetElapsedSeconds(),
-			LettersPerSecond: m.game.Stats.GetLettersPerSecond(),
-			WordsPerSecond:   m.game.Stats.GetWordsPerSecond(),
-			AccuracyPercent:  m.game.Stats.GetAccuracyPercent(),
-		}
-
-		return ui.RenderGame(wordInfos, highlighted, m.game.InputBuffer, stats, len(activeWords))
 	} else if m.game.Status == game.StatusPaused {
 		// Pass stats and animation frame to pause menu
 		activeWords := m.game.GetActiveWords()
@@ -376,6 +504,16 @@ func (m model) View() string {
 			LettersPerSecond: m.game.Stats.GetLettersPerSecond(),
 			WordsPerSecond:   m.game.Stats.GetWordsPerSecond(),
 			AccuracyPercent:  m.game.Stats.GetAccuracyPercent(),
+		}
+
+		// 如果是极速模式且未中止，检查是否创造新记录
+		if m.game.Mode == game.ModeSpeedRun && !m.game.Aborted {
+			completionTime := m.game.Stats.GetElapsedSeconds()
+			if m.speedRunBestTime == 0 || completionTime < m.speedRunBestTime {
+				// 新记录！
+				saveSpeedRunBestTime(completionTime)
+				m.speedRunBestTime = completionTime
+			}
 		}
 
 		return ui.RenderResults(stats, m.game.Aborted, m.game.ResultsMenuIndex, m.animFrame)
@@ -421,6 +559,12 @@ func main() {
 		// Continue anyway - classic mode will still work
 	}
 
+	// 设置节奏大师模式的配置参数
+	g.RhythmInitialTimeLimit = cfg.RhythmInitialTimeLimit
+	g.RhythmMinTimeLimit = cfg.RhythmMinTimeLimit
+	g.RhythmDifficultyStep = cfg.RhythmDifficultyStep
+	g.RhythmWordsPerLevel = cfg.RhythmWordsPerLevel
+
 	// Create Bubble Tea program
 	p := tea.NewProgram(
 		initialModel(cfg, g),
@@ -432,4 +576,47 @@ func main() {
 		fmt.Printf("Failed to run: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// speedRunRecord 存储极速模式的最佳时间
+type speedRunRecord struct {
+	BestTime float64 `json:"best_time"` // 单位：秒
+}
+
+// loadSpeedRunBestTime 从文件加载最佳时间
+func loadSpeedRunBestTime() float64 {
+	const recordFile = "speedrun_record.json"
+
+	file, err := os.Open(recordFile)
+	if err != nil {
+		return 0 // 还没有记录文件
+	}
+	defer file.Close()
+
+	var record speedRunRecord
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&record); err != nil {
+		return 0
+	}
+
+	return record.BestTime
+}
+
+// saveSpeedRunBestTime 保存新的最佳时间到文件
+func saveSpeedRunBestTime(newTime float64) error {
+	const recordFile = "speedrun_record.json"
+
+	record := speedRunRecord{
+		BestTime: newTime,
+	}
+
+	file, err := os.Create(recordFile)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(&record)
 }
