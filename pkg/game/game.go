@@ -801,7 +801,7 @@ func (g *Game) StartUnderwaterCountdown(durationSeconds int) error {
 
 	// 生成10条小鱼
 	g.UnderwaterState.Fishes = g.GenerateFishes(10)
-	g.CountdownDuration = durationSeconds
+	g.CountdownDurationSecs = durationSeconds
 
 	return nil
 }
@@ -813,7 +813,7 @@ func (g *Game) UpdateCountdown() {
 	}
 
 	elapsed := time.Since(g.UnderwaterState.CountdownStart).Seconds()
-	remaining := float64(g.CountdownDuration) - elapsed
+	remaining := float64(g.CountdownDurationSecs) - elapsed
 
 	if remaining <= 0 {
 		g.finish(false) // 时间用尽，游戏结束
@@ -827,7 +827,7 @@ func (g *Game) GetRemainingTime() int {
 	}
 
 	elapsed := time.Since(g.UnderwaterState.CountdownStart).Seconds()
-	remaining := float64(g.CountdownDuration) - elapsed
+	remaining := float64(g.CountdownDurationSecs) - elapsed
 	if remaining < 0 {
 		return 0
 	}
