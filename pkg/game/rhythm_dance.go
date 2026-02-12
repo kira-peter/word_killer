@@ -41,6 +41,9 @@ type RhythmDanceState struct {
 	LastJudgment     string    // "Perfect", "Nice", "OK", "Miss"
 	LastJudgmentTime time.Time // 上次判定时间
 
+	// 判定历史记录（按顺序记录每次判定结果）
+	JudgmentHistory []string // 存储每次判定的结果："Perfect", "Nice", "OK", "Miss"
+
 	// 舞蹈动画状态
 	DanceAnimState *DanceAnimationState
 }
@@ -76,7 +79,8 @@ func (g *Game) StartRhythmDanceMode(duration int) error {
 		StartTime:        time.Now(),
 		CurrentCombo:     0,
 		MaxCombo:         0,
-		DanceAnimState:   NewDanceAnimationState(), // 初始化动画状态
+		JudgmentHistory:  []string{},                   // 初始化判定历史
+		DanceAnimState:   NewDanceAnimationState(),     // 初始化动画状态
 	}
 
 	// 随机选择第一个单词
@@ -139,7 +143,7 @@ func (g *Game) JudgeRhythmTiming() (string, int) {
 		state.CurrentCombo = 0 // OK 重置连击
 	} else {
 		judgment = "Miss"
-		score = 0
+		score = -1 // Miss 扣1分
 		state.MissCount++
 		state.CurrentCombo = 0 // Miss 重置连击
 	}
@@ -156,6 +160,9 @@ func (g *Game) JudgeRhythmTiming() (string, int) {
 	state.LastJudgment = judgment
 	state.LastJudgmentTime = time.Now()
 
+	// 添加到判定历史记录
+	state.JudgmentHistory = append(state.JudgmentHistory, judgment)
+
 	return judgment, score
 }
 
@@ -170,8 +177,8 @@ func (g *Game) CompleteRhythmWord() {
 	// 增加完成计数
 	state.CompletedWords++
 
-	// 增加速度（每完成1个单词增加0.001）
-	state.PointerSpeed += 0.001
+	// 增加速度（每完成1个单词增加0.003）
+	state.PointerSpeed += 0.003
 
 	// 清空输入缓冲区
 	g.InputBuffer = ""
@@ -180,12 +187,19 @@ func (g *Game) CompleteRhythmWord() {
 	state.CurrentWord = g.pickRandomWord()
 }
 
-// CheckRhythmTimeout 检查倒计时是否结束
+// CheckRhythmTimeout 检查倒计时是否结束以及Miss次数
 func (g *Game) CheckRhythmTimeout() {
 	if g.RhythmDanceState == nil {
 		return
 	}
 
+	// 检查Miss次数，达到10次提前结束游戏
+	if g.RhythmDanceState.MissCount >= 10 {
+		g.finish(false) // Miss过多，游戏结束
+		return
+	}
+
+	// 检查时间是否到
 	elapsed := time.Since(g.RhythmDanceState.StartTime)
 	if elapsed >= g.RhythmDanceState.Duration {
 		g.finish(false) // 时间到，游戏结束
@@ -233,12 +247,7 @@ func (g *Game) TryRhythmJudgment() {
 
 	// 检查单词是否完全正确
 	if g.InputBuffer != g.RhythmDanceState.CurrentWord {
-		// 单词不正确，判定为 Miss
-		g.RhythmDanceState.MissCount++
-		g.RhythmDanceState.CurrentCombo = 0
-		g.RhythmDanceState.LastJudgment = "Miss"
-		g.RhythmDanceState.LastJudgmentTime = time.Now()
-		g.InputBuffer = "" // 清空输入，重新输入
+		// 单词不完全匹配，忽略该按键（不执行任何操作）
 		return
 	}
 
