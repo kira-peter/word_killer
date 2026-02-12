@@ -247,7 +247,20 @@ func (g *Game) TryRhythmJudgment() {
 
 	// 检查单词是否完全正确
 	if g.InputBuffer != g.RhythmDanceState.CurrentWord {
-		// 单词不完全匹配，忽略该按键（不执行任何操作）
+		// 单词不正确或不完整，判定为 Miss，扣1分
+		g.RhythmDanceState.MissCount++
+		g.RhythmDanceState.CurrentCombo = 0
+		g.RhythmDanceState.TotalScore -= 1 // Miss 扣1分
+		g.RhythmDanceState.LastJudgment = "Miss"
+		g.RhythmDanceState.LastJudgmentTime = time.Now()
+
+		// 添加到判定历史记录
+		g.RhythmDanceState.JudgmentHistory = append(g.RhythmDanceState.JudgmentHistory, "Miss")
+
+		// 触发Miss动画
+		g.TriggerJudgmentAnimation("Miss")
+
+		g.InputBuffer = "" // 清空输入，重新输入
 		return
 	}
 
