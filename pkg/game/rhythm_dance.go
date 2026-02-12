@@ -65,10 +65,10 @@ func (g *Game) StartRhythmDanceMode(duration int) error {
 
 	// 初始化节奏舞蹈状态
 	g.RhythmDanceState = &RhythmDanceState{
-		PointerPosition:  0.5,                                   // 从中间开始
-		PointerDirection: 1,                                     // 向右
-		PointerSpeed:     0.01,                                  // 初始速度（将从配置读取）
-		GoldenRatio:      0.618,                                 // 黄金分割点
+		PointerPosition:  0.5,   // 从中间开始
+		PointerDirection: 1,     // 向右
+		PointerSpeed:     0.01,  // 初始速度（将从配置读取）
+		GoldenRatio:      0.618, // 黄金分割点
 		CompletedWords:   0,
 		TotalScore:       0,
 		PerfectCount:     0,
@@ -79,8 +79,8 @@ func (g *Game) StartRhythmDanceMode(duration int) error {
 		StartTime:        time.Now(),
 		CurrentCombo:     0,
 		MaxCombo:         0,
-		JudgmentHistory:  []string{},                   // 初始化判定历史
-		DanceAnimState:   NewDanceAnimationState(),     // 初始化动画状态
+		JudgmentHistory:  []string{},               // 初始化判定历史
+		DanceAnimState:   NewDanceAnimationState(), // 初始化动画状态
 	}
 
 	// 随机选择第一个单词
@@ -100,13 +100,9 @@ func (g *Game) UpdateRhythmPointer() {
 	// 更新位置
 	state.PointerPosition += state.PointerSpeed * float64(state.PointerDirection)
 
-	// 检查边界并反转方向
+	// 检查边界
 	if state.PointerPosition >= 1.0 {
-		state.PointerPosition = 1.0
-		state.PointerDirection = -1
-	} else if state.PointerPosition <= 0.0 {
 		state.PointerPosition = 0.0
-		state.PointerDirection = 1
 	}
 }
 

@@ -9,15 +9,11 @@
 - **AND** 新位置 = 当前位置 + 速度 × 方向
 - **AND** 位置值应保持在 [0.0, 1.0] 范围内
 
-#### Scenario: Pointer boundary reversal
-- **WHEN** 指针位置达到 1.0（右边界）
-- **THEN** 系统应将方向反转为向左（-1）
-- **AND** 指针位置设置为 1.0
-
-#### Scenario: Pointer boundary reversal at left
-- **WHEN** 指针位置达到 0.0（左边界）
-- **THEN** 系统应将方向反转为向右（1）
-- **AND** 指针位置设置为 0.0
+#### Scenario: Pointer boundary loop
+- **WHEN** 指针位置达到或超过 1.0（右边界）
+- **THEN** 系统应将指针位置重置为 0.0（左边界）
+- **AND** 方向保持不变（继续向右）
+- **AND** 形成单向循环移动效果
 
 ### Requirement: Rhythm Timing Judgment
 系统 SHALL 基于指针位置计算节奏判定等级。
@@ -47,15 +43,16 @@
 - **WHEN** 玩家按下空格键
 - **AND** 指针距离黄金分割点的绝对距离 > 0.30
 - **THEN** 系统应判定为 Miss
-- **AND** 不增加分数
+- **AND** 扣 1 分
 - **AND** Miss 计数加 1
 
-#### Scenario: Judgment only on correct word
-- **WHEN** 玩家按下空格键
+#### Scenario: Miss judgment on incorrect word
+- **WHEN** 玩家按下空格键或回车键
 - **AND** 当前输入的字母与目标单词不完全匹配
-- **THEN** 系统应忽略判定请求
-- **AND** 不更新分数和判定计数
-- **AND** 不切换到下一个单词
+- **THEN** 系统应判定为 Miss
+- **AND** Miss 计数加 1
+- **AND** 扣 1 分
+- **AND** 清空输入缓冲区但不切换单词
 
 ### Requirement: Golden Ratio Position
 系统 SHALL 使用黄金分割点作为判定基准。
