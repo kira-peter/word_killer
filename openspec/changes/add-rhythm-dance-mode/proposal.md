@@ -24,7 +24,7 @@
 
 - **受影响规范**:
   - `game-modes` - 添加 ModeRhythmDance 枚举和初始化逻辑
-  - `input-handling` - 添加节奏模式下的空格键判定逻辑
+  - `input-handling` - 添加节奏模式下的空格键和回车键判定逻辑
   - `ui-rendering` - 添加节奏模式专用界面渲染
   - `statistics` - 添加节奏模式统计（Perfect/Nice/OK/Miss 计数、总分等）
 

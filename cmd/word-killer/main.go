@@ -206,7 +206,13 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "esc":
 			m.game.Pause()
 		case "enter":
-			m.game.TryEliminate()
+			// 节奏舞蹈模式回车触发判定
+			// 其他模式触发确认
+			if m.game.Mode == game.ModeRhythmDance {
+				m.game.TryRhythmJudgment()
+			} else {
+				m.game.TryEliminate()
+			}
 		case "backspace":
 			m.game.Backspace()
 		default:
@@ -482,10 +488,11 @@ func (m model) View() string {
 
 			// 构建统计信息
 			stats := ui.RhythmDanceStats{
-				RemainingTime:  m.game.GetRhythmRemainingTime(),
-				CompletedWords: state.CompletedWords,
-				TotalScore:     state.TotalScore,
-				CurrentCombo:   state.CurrentCombo,
+				RemainingTime:   m.game.GetRhythmRemainingTime(),
+				CompletedWords:  state.CompletedWords,
+				TotalScore:      state.TotalScore,
+				CurrentCombo:    state.CurrentCombo,
+				JudgmentHistory: state.JudgmentHistory,
 			}
 
 			// 构建判定特效信息

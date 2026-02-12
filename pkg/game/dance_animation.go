@@ -32,7 +32,7 @@ var idleFrames = []string{
  / \`,
 }
 
-// Perfect 动画帧（3帧播放一次）
+// Perfect 动画帧（4帧播放一次）- 大幅度欢呼动作
 var perfectFrames = []string{
 	` \o/
   |
@@ -43,19 +43,25 @@ var perfectFrames = []string{
 	` \o/
   |
  / \`,
+	`\o o/
+  |
+ < >`,
 }
 
-// Nice 动画帧（2帧播放一次）
+// Nice 动画帧（3帧播放一次）- 中等幅度摇摆
 var niceFrames = []string{
 	`  o
  /|
+ / \`,
+	`  o
+ /|\
  / \`,
 	`  o
   |\
  / \`,
 }
 
-// OK 动画帧（2帧播放一次）
+// OK 动画帧（2帧播放一次）- 轻微点头
 var okFrames = []string{
 	`  o
  /|\
@@ -65,13 +71,10 @@ var okFrames = []string{
  / \`,
 }
 
-// Miss 动画帧（2帧播放一次）
+// Miss 动画帧（1帧）- 完全不动
 var missFrames = []string{
-	` _o_
-  |
- / \`,
 	`  o
-_/|\_
+ /|\
  / \`,
 }
 

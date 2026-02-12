@@ -63,7 +63,7 @@ func DefaultConfig() *Config {
 		RhythmWordsPerLevel:    10,   // 每10个词升级
 		// Rhythm Dance mode defaults
 		RhythmDanceDuration:     60,   // 默认60秒
-		RhythmDanceInitialSpeed: 0.01, // 初始速度0.01
+		RhythmDanceInitialSpeed: 0.05, // 初始速度0.05
 	}
 }
 

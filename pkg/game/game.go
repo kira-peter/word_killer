@@ -663,6 +663,10 @@ func (g *Game) CheckTimeouts() {
 		if wordElapsed >= g.WordTimeLimit {
 			g.finish(false) // 节奏失败
 		}
+
+	case ModeRhythmDance:
+		// 检查节奏舞蹈模式倒计时
+		g.CheckRhythmTimeout()
 	}
 }
 
