@@ -37,8 +37,9 @@ type Config struct {
 	RhythmWordsPerLevel    int     `json:"rhythm_words_per_level"`    // 节奏大师每级所需单词数
 
 	// Rhythm Dance mode settings
-	RhythmDanceDuration      int     `json:"rhythm_dance_duration"`       // 节奏舞蹈模式时长（秒）
-	RhythmDanceInitialSpeed  float64 `json:"rhythm_dance_initial_speed"`  // 节奏舞蹈指针初始速度
+	RhythmDanceDuration      int     `json:"rhythm_dance_duration"`        // 节奏舞蹈模式时长（秒）
+	RhythmDanceInitialSpeed  float64 `json:"rhythm_dance_initial_speed"`   // 节奏舞蹈指针初始速度
+	RhythmDanceSpeedIncrement float64 `json:"rhythm_dance_speed_increment"` // 每完成一个单词的速度增量
 }
 
 // DefaultConfig returns default configuration
@@ -62,8 +63,9 @@ func DefaultConfig() *Config {
 		RhythmDifficultyStep:   0.1,  // 每级减少0.1秒
 		RhythmWordsPerLevel:    10,   // 每10个词升级
 		// Rhythm Dance mode defaults
-		RhythmDanceDuration:     60,   // 默认60秒
-		RhythmDanceInitialSpeed: 0.05, // 初始速度0.05
+		RhythmDanceDuration:       60,    // 默认60秒
+		RhythmDanceInitialSpeed:   0.05,  // 初始速度0.05
+		RhythmDanceSpeedIncrement: 0.005, // 每完成一个单词增加0.005
 	}
 }
 

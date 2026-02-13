@@ -183,7 +183,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				err = m.game.StartUnderwaterCountdown(m.cfg.CountdownDuration)
 			case 6:
 				// 节奏舞蹈模式
-				err = m.game.StartRhythmDanceMode(m.cfg.RhythmDanceDuration)
+				err = m.game.StartRhythmDanceMode(m.cfg.RhythmDanceDuration, m.cfg.RhythmDanceInitialSpeed, m.cfg.RhythmDanceSpeedIncrement)
 			}
 			if err != nil {
 				return m, tea.Quit
@@ -273,7 +273,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				case game.ModeUnderwaterCountdown:
 					m.game.StartUnderwaterCountdown(m.cfg.CountdownDuration)
 				case game.ModeRhythmDance:
-					m.game.StartRhythmDanceMode(m.cfg.RhythmDanceDuration)
+					m.game.StartRhythmDanceMode(m.cfg.RhythmDanceDuration, m.cfg.RhythmDanceInitialSpeed, m.cfg.RhythmDanceSpeedIncrement)
 				default:
 					m.game.Start(m.cfg.WordCount)
 				}
@@ -316,7 +316,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				case game.ModeUnderwaterCountdown:
 					m.game.StartUnderwaterCountdown(m.cfg.CountdownDuration)
 				case game.ModeRhythmDance:
-					m.game.StartRhythmDanceMode(m.cfg.RhythmDanceDuration)
+					m.game.StartRhythmDanceMode(m.cfg.RhythmDanceDuration, m.cfg.RhythmDanceInitialSpeed, m.cfg.RhythmDanceSpeedIncrement)
 				default:
 					m.game.Start(m.cfg.WordCount)
 				}
@@ -497,13 +497,15 @@ func (m model) View() string {
 
 			// 构建判定特效信息
 			judgmentEffect := ui.JudgmentEffectInfo{
-				LastJudgment:     state.LastJudgment,
-				LastJudgmentTime: state.LastJudgmentTime,
+				LastJudgment:         state.LastJudgment,
+				LastJudgmentTime:     state.LastJudgmentTime,
+				LastJudgmentPosition: state.LastJudgmentPosition,
 			}
 
 			return ui.RenderRhythmDanceGame(
 				danceFrame,
-				state.CurrentWord,
+				state.WordQueue,
+				state.CurrentWordIndex,
 				m.game.InputBuffer,
 				rhythmBar,
 				stats,

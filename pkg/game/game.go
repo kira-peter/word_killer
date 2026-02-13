@@ -484,9 +484,9 @@ func (g *Game) AddChar(ch rune) {
 			g.InputBuffer += string(ch)
 			g.Stats.AddKeystroke()
 
-			// 检查是否匹配当前单词
+			// 检查是否匹配当前单词（队列中间位置，索引2）
 			if g.RhythmDanceState != nil {
-				currentWord := g.RhythmDanceState.CurrentWord
+				currentWord := g.RhythmDanceState.WordQueue[g.RhythmDanceState.CurrentWordIndex]
 				if len(g.InputBuffer) <= len(currentWord) &&
 					strings.HasPrefix(currentWord, g.InputBuffer) {
 					g.Stats.AddValidKeystroke()

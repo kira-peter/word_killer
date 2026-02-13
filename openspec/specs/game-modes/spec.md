@@ -381,3 +381,58 @@ The system SHALL track character-by-character correctness in Sentence mode.
 - **THEN** the system SHALL NOT increment correct character count
 - **AND** mark the position as incorrect for UI rendering
 
+### Requirement: Rhythm Dance Mode Initialization
+系统 SHALL 维护节奏舞蹈模式的完整状态，包括单词队列。
+
+#### Scenario: Initialize rhythm dance state with word queue
+- **WHEN** 启动节奏舞蹈模式
+- **THEN** 系统应初始化 RhythmDanceState 结构
+- **AND** 创建包含 5 个单词的单词队列（WordQueue）
+- **AND** 前2个位置（索引0-1）设为空字符串或占位符（历史区初始为空）
+- **AND** 后3个位置（索引2-4）填充随机单词（当前+预览区）
+- **AND** 设置当前可输入单词索引为 2（中间位置）
+- **AND** 初始化指针位置、速度等其他状态
+
+#### Scenario: Update word queue on word completion
+- **WHEN** 玩家成功完成当前单词（WordQueue[2]）
+- **THEN** 系统应将整个 WordQueue 上移（丢弃索引0，1→0, 2→1, 3→2, 4→3）
+- **AND** 生成新单词追加到 WordQueue 末尾（索引4）
+- **AND** 保持 WordQueue 长度为 5
+- **AND** 当前可输入单词始终在索引 2
+- **AND** 清空输入缓冲区
+
+### Requirement: Rhythm Dance Mode Time Management
+系统 SHALL 管理节奏舞蹈模式的倒计时。
+
+#### Scenario: Track countdown timer
+- **WHEN** 游戏处于 Running 状态
+- **THEN** 系统应每帧更新剩余时间
+- **AND** 剩余时间应持续递减
+
+#### Scenario: Auto-end on timeout
+- **WHEN** 倒计时归零
+- **THEN** 系统应自动结束游戏
+- **AND** 转换状态为 Finished
+- **AND** 计算并保存最终统计数据
+
+#### Scenario: Display time warning
+- **WHEN** 剩余时间少于 10 秒
+- **THEN** 系统应以红色或闪烁方式显示倒计时
+- **AND** 提醒玩家时间紧迫
+
+### Requirement: Rhythm Dance Word Progression
+系统 SHALL 管理节奏舞蹈模式中的单词切换。
+
+#### Scenario: Switch to next word on space
+- **WHEN** 玩家按下空格键完成当前单词判定
+- **THEN** 系统应从词库中随机选择下一个单词
+- **AND** 清空输入缓冲区
+- **AND** 增加完成单词计数
+- **AND** 根据完成数判断是否需要加速指针
+
+#### Scenario: Pointer speed increase
+- **WHEN** 玩家完成一个单词
+- **THEN** 系统应增加指针摆动速度
+- **AND** 速度增量为 0.001（每完成一个单词）
+- **AND** 更新 RhythmDanceState 中的 PointerSpeed 字段
+

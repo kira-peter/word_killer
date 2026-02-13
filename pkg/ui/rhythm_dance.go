@@ -31,14 +31,16 @@ type RhythmBarInfo struct {
 
 // JudgmentEffectInfo 判定特效信息
 type JudgmentEffectInfo struct {
-	LastJudgment     string
-	LastJudgmentTime time.Time
+	LastJudgment         string
+	LastJudgmentTime     time.Time
+	LastJudgmentPosition float64 // 上次判定的指针位置（用于显示箭头）
 }
 
 // RenderRhythmDanceGame 渲染节奏舞蹈模式主界面
 func RenderRhythmDanceGame(
 	danceFrame string,
-	currentWord string,
+	wordQueue []string,   // 单词队列（固定长度5）
+	currentWordIndex int, // 当前单词索引（固定为2）
 	userInput string,
 	rhythmBar RhythmBarInfo,
 	stats RhythmDanceStats,
@@ -50,8 +52,8 @@ func RenderRhythmDanceGame(
 	s.WriteString(renderRhythmStats(stats))
 	s.WriteString("\n")
 
-	// === 中部：主游戏区域（舞蹈小人 + 单词 + 节奏条）===
-	mainArea := renderRhythmMainArea(danceFrame, currentWord, userInput, rhythmBar, effectInfo, stats)
+	// === 中部：主游戏区域（舞蹈小人 + 单词队列 + 节奏条）===
+	mainArea := renderRhythmMainArea(danceFrame, wordQueue, currentWordIndex, userInput, rhythmBar, effectInfo, stats)
 	s.WriteString(mainArea)
 	s.WriteString("\n")
 
@@ -90,10 +92,11 @@ func renderRhythmStats(stats RhythmDanceStats) string {
 	return lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Center).Render(statusStyled)
 }
 
-// renderRhythmMainArea 渲染主游戏区域（新布局：左右分栏）
+// renderRhythmMainArea 渲染主游戏区域（新布局：上下布局，单词队列在中间）
 func renderRhythmMainArea(
 	danceFrame string,
-	currentWord string,
+	wordQueue []string,
+	currentWordIndex int,
 	userInput string,
 	rhythmBar RhythmBarInfo,
 	effectInfo JudgmentEffectInfo,
@@ -109,17 +112,17 @@ func renderRhythmMainArea(
 	lines = append(lines, historyLines...)
 	lines = append(lines, "") // 空行
 
-	// == 中部：舞蹈小人 ==
+	// == 中上部：舞蹈小人 ==
 	danceLines := renderDanceCharacter(danceFrame, effectInfo.LastJudgment)
 	lines = append(lines, danceLines...)
 	lines = append(lines, "") // 空行
 
-	// == 下部：左右分栏（单词+输入 ｜ 节奏条）==
-	splitLines := renderSplitWordAndBar(currentWord, userInput, rhythmBar, effectInfo)
+	// == 中部：左右分栏（单词队列 ｜ 节奏条）==
+	splitLines := renderWordQueueAndBar(wordQueue, currentWordIndex, userInput, rhythmBar, effectInfo)
 	lines = append(lines, splitLines...)
 
 	// 添加底部空行增加高度，使其与结算界面一致（约18-20行总高度）
-	lines = append(lines, "", "", "", "", "")
+	lines = append(lines, "", "")
 
 	return wordBoxStyle.Render(strings.Join(lines, "\n"))
 }
@@ -206,26 +209,26 @@ func renderDanceCharacter(danceFrame string, lastJudgment string) []string {
 	// 将舞蹈帧按行分割
 	frameLines := strings.Split(danceFrame, "\n")
 
-	// 根据判定类型选择颜色
+	// 根据判定类型选择颜色（与判定颜色统一）
 	var characterStyle lipgloss.Style
 	switch lastJudgment {
 	case "Perfect":
-		// Perfect: 亮黄色闪烁
+		// Perfect: 金色
 		characterStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("226")).
 			Bold(true)
 	case "Nice":
-		// Nice: 绿色
+		// Nice: 蓝色
+		characterStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("33"))
+	case "OK":
+		// OK: 绿色
 		characterStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("46"))
-	case "OK":
-		// OK: 灰色
-		characterStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("247"))
 	case "Miss":
-		// Miss: 暗灰色
+		// Miss: 红色
 		characterStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240"))
+			Foreground(lipgloss.Color("196"))
 	default:
 		// 默认: 白色
 		characterStyle = lipgloss.NewStyle().
@@ -249,107 +252,112 @@ func renderDanceCharacter(danceFrame string, lastJudgment string) []string {
 	return lines
 }
 
-// renderSplitWordAndBar 渲染左右分栏：单词+输入（左半屏）｜节奏条（右半屏）
-func renderSplitWordAndBar(
-	currentWord string,
+// renderWordQueueAndBar 渲染左右分栏：单词队列（左半屏，靠右对齐）｜ 节奏条（右半屏，仅显示在中间行）
+func renderWordQueueAndBar(
+	wordQueue []string,
+	currentWordIndex int,
 	userInput string,
 	rhythmBar RhythmBarInfo,
 	effectInfo JudgmentEffectInfo,
 ) []string {
-	// 左半屏：单词和输入（2行）
-	leftContent := renderCompactWordInput(currentWord, userInput)
-	leftLines := strings.Split(leftContent, "\n")
-
-	// 右半屏：节奏条（现在是多行，包含Perfect特效区）
-	rightContent := renderCompactRhythmBar(rhythmBar, effectInfo)
-	rightLines := strings.Split(rightContent, "\n")
-
-	// 确保两边行数一致，补齐空行
-	maxLines := len(leftLines)
-	if len(rightLines) > maxLines {
-		maxLines = len(rightLines)
-	}
-
-	for len(leftLines) < maxLines {
-		leftLines = append(leftLines, "")
-	}
-	for len(rightLines) < maxLines {
-		rightLines = append(rightLines, "")
-	}
-
-	// 逐行合并左右内容
 	var lines []string
-	leftStyle := lipgloss.NewStyle().Width(contentWidth/2 - 4).Align(lipgloss.Center)
-	rightStyle := lipgloss.NewStyle().Width(contentWidth/2 - 4).Align(lipgloss.Center)
 
-	for i := 0; i < maxLines; i++ {
-		leftPart := leftStyle.Render(leftLines[i])
-		rightPart := rightStyle.Render(rightLines[i])
+	// 确保单词队列长度为5
+	if len(wordQueue) != 5 {
+		// 如果长度不对，返回错误提示
+		return []string{"Error: WordQueue length must be 5"}
+	}
+
+	// 左半屏宽度和右半屏宽度
+	const leftWidth = contentWidth/2 - 4
+	const rightWidth = contentWidth/2 - 4
+
+	// 颜色配置（从上到下：深灰 → 浅灰 → 白色 → 浅灰 → 深灰）
+	colors := []string{"#444444", "#888888", "#FFFFFF", "#888888", "#444444"}
+
+	// 渲染节奏条内容（包含 Perfect 特效、节奏条、箭头、其他判定特效），共5行
+	// 结构：[0-1: Perfect特效2行, 2: 节奏条主体1行, 3: 箭头1行, 4: 其他判定1行]
+	rhythmBarLines := renderRhythmBarWithEffects(rhythmBar, effectInfo)
+
+	// 首先渲染节奏条的前2行（Perfect特效），左侧空白
+	for j := 0; j < 2; j++ {
+		leftPart := lipgloss.NewStyle().Width(leftWidth).Render("")
+		rightPart := lipgloss.NewStyle().Width(rightWidth).Align(lipgloss.Center).Render(rhythmBarLines[j])
 		line := leftPart + "  │  " + rightPart
 		lines = append(lines, line)
 	}
 
+	// 渲染单词队列的前3行（索引0-2），索引2是当前单词，右侧显示节奏条主体
+	for i := 0; i < 3; i++ {
+		word := wordQueue[i]
+		color := colors[i]
+
+		var leftContent string
+
+		if i == currentWordIndex {
+			// 当前行（索引2）：显示 "Input:[完整单词]"，带颜色编码
+			leftContent = renderCurrentWordWithInput(word, userInput)
+		} else {
+			// 其他行：使用对齐格式显示单词，保持与 Input:[...] 相同宽度
+			leftContent = renderWordAligned(word, color)
+		}
+
+		// 左半屏：单词靠右对齐
+		leftPart := lipgloss.NewStyle().Width(leftWidth).Align(lipgloss.Right).Render(leftContent)
+
+		// 右半屏：仅在当前行（索引2）显示节奏条主体（rhythmBarLines[2]）
+		var rightPart string
+		if i == currentWordIndex {
+			// 显示节奏条主体（索引2）
+			rightPart = lipgloss.NewStyle().Width(rightWidth).Align(lipgloss.Center).Render(rhythmBarLines[2])
+		} else {
+			// 其他行：空白
+			rightPart = lipgloss.NewStyle().Width(rightWidth).Render("")
+		}
+
+		// 合并左右两侧，当前行使用 ━ 连接，其他行使用 │
+		var separator string
+		if i == currentWordIndex {
+			// 当前行：使用深灰色 ━ 连接单词与节奏条
+			separatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // 深灰色
+			separator = separatorStyle.Render("━━━━━")
+		} else {
+			separator = "  │  " // 其他行：使用 │ 分隔
+		}
+		line := leftPart + separator + rightPart
+		lines = append(lines, line)
+	}
+
+	// 渲染单词行3 + 箭头行 - 左侧显示单词队列索引3，右侧显示箭头
+	word3 := wordQueue[3]
+	color3 := colors[3]
+	leftContent3 := renderWordAligned(word3, color3)
+	leftPart := lipgloss.NewStyle().Width(leftWidth).Align(lipgloss.Right).Render(leftContent3)
+	rightPart := lipgloss.NewStyle().Width(rightWidth).Align(lipgloss.Center).Render(rhythmBarLines[3])
+	line := leftPart + "  │  " + rightPart
+	lines = append(lines, line)
+
+	// 渲染单词队列的最后1行（索引4）
+	word4 := wordQueue[4]
+	color4 := colors[4]
+	leftContent4 := renderWordAligned(word4, color4)
+	leftPart = lipgloss.NewStyle().Width(leftWidth).Align(lipgloss.Right).Render(leftContent4)
+	rightPart = lipgloss.NewStyle().Width(rightWidth).Render("")
+	line = leftPart + "  │  " + rightPart
+	lines = append(lines, line)
+
+	// 其他判定特效行（rhythmBarLines[4]）
+	leftPart = lipgloss.NewStyle().Width(leftWidth).Render("")
+	rightPart = lipgloss.NewStyle().Width(rightWidth).Align(lipgloss.Center).Render(rhythmBarLines[4])
+	line = leftPart + "  │  " + rightPart
+	lines = append(lines, line)
+
 	return lines
 }
 
-// renderCompactWordInput 渲染紧凑的单词和输入（左半屏）
-func renderCompactWordInput(currentWord string, userInput string) string {
-	// 显示单词（根据输入高亮）
-	var wordChars []string
-
-	for i, ch := range currentWord {
-		charStr := string(ch)
-
-		if i < len(userInput) {
-			// 已输入的部分
-			if userInput[i] == byte(ch) {
-				// 正确：绿色高亮
-				wordChars = append(wordChars, highlightStyle.Render(charStr))
-			} else {
-				// 错误：红色
-				errorStyle := lipgloss.NewStyle().
-					Foreground(lipgloss.Color("196")).
-					Bold(true)
-				wordChars = append(wordChars, errorStyle.Render(charStr))
-			}
-		} else {
-			// 未输入的部分：普通样式
-			wordChars = append(wordChars, wordStyle.Render(charStr))
-		}
-	}
-
-	renderedWord := strings.Join(wordChars, "")
-
-	// 输入提示（与单词对齐）
-	var inputChars []string
-	for i := 0; i < len(currentWord); i++ {
-		if i < len(userInput) {
-			// 已输入的字符
-			charStr := string(userInput[i])
-			if i < len(currentWord) && userInput[i] == currentWord[i] {
-				// 正确：绿色
-				inputChars = append(inputChars, highlightStyle.Render(charStr))
-			} else {
-				// 错误：红色
-				errorStyle := lipgloss.NewStyle().
-					Foreground(lipgloss.Color("196")).
-					Bold(true)
-				inputChars = append(inputChars, errorStyle.Render(charStr))
-			}
-		} else {
-			// 未输入的位置：显示下划线占位符
-			inputChars = append(inputChars, lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("_"))
-		}
-	}
-
-	inputDisplay := strings.Join(inputChars, "")
-
-	return renderedWord + "\n" + inputDisplay
-}
-
-// renderCompactRhythmBar 渲染紧凑的节奏条（右半屏）
-// Perfect特效显示在节奏条上方，保持固定高度
-func renderCompactRhythmBar(rhythmBar RhythmBarInfo, effectInfo JudgmentEffectInfo) string {
+// renderRhythmBarWithEffects 渲染完整的节奏条内容（包含判定特效、节奏条、箭头）
+// 返回固定5行内容：[上方特效2行, 节奏条1行, 箭头1行, 下方特效1行]
+func renderRhythmBarWithEffects(rhythmBar RhythmBarInfo, effectInfo JudgmentEffectInfo) []string {
 	var lines []string
 
 	// 节奏条宽度
@@ -366,52 +374,61 @@ func renderCompactRhythmBar(rhythmBar RhythmBarInfo, effectInfo JudgmentEffectIn
 		pointerPos = barWidth - 1
 	}
 
-	// 第一部分：Perfect特效区域（固定高度2行）
-	// DEBUG: 直接显示特效测试
-	if effectInfo.LastJudgment == "Perfect" {
+	// 根据判定类型渲染特效
+	var topEffect []string  // 上方特效（2行）
+	var bottomEffect string // 下方特效（1行）
+
+	if effectInfo.LastJudgment != "" {
 		elapsed := time.Since(effectInfo.LastJudgmentTime)
 		if elapsed < 1*time.Second {
-			perfectEffect := renderPerfectExplosion(elapsed)
-			lines = append(lines, perfectEffect...)
+			topEffect, bottomEffect = renderJudgmentEffects(effectInfo.LastJudgment, elapsed)
 		} else {
-			// 特效结束，显示空行保持高度
-			lines = append(lines, "", "")
+			topEffect = []string{"", ""}
+			bottomEffect = ""
 		}
-	} else if effectInfo.LastJudgment != "" {
-		// DEBUG: 显示当前判定类型
-		debugStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-		lines = append(lines, debugStyle.Render("Last: "+effectInfo.LastJudgment), "")
 	} else {
-		// 非Perfect判定，显示空行保持高度
-		lines = append(lines, "", "")
+		topEffect = []string{"", ""}
+		bottomEffect = ""
 	}
 
-	// 第二部分：节奏条
+	// 添加上方特效（2行）
+	lines = append(lines, topEffect...)
+
+	// 渲染节奏条主体（1行）
 	var barChars []string
 	for i := 0; i < barWidth; i++ {
-		// 计算距离黄金点的距离
-		distance := math.Abs(float64(i)/float64(barWidth) - rhythmBar.GoldenRatio)
+		// 计算距离黄金点的字符数（绝对距离）
+		charDistance := int(math.Abs(float64(i - goldenPos)))
 
-		// 根据距离选择颜色
+		// 根据字符距离选择颜色，与判定颜色一致
+		// 模式: --4433223344--
+		//       Miss OK Nice Perfect Nice OK Miss
 		var cellStyle lipgloss.Style
-		if distance <= 0.05 {
-			cellStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("226")) // 亮黄
-		} else if distance <= 0.15 {
+		if charDistance == 0 {
+			// Perfect 区域（黄金点本身）：金色
+			cellStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("226")) // 金色
+		} else if charDistance <= 2 {
+			// Nice 区域（1-2个字符距离）：蓝色
+			cellStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("33")) // 蓝色
+		} else if charDistance <= 4 {
+			// OK 区域（3-4个字符距离）：绿色
 			cellStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("46")) // 绿色
-		} else if distance <= 0.30 {
-			cellStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("147")) // 浅紫
 		} else {
-			cellStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // 暗灰
+			// Miss 区域（>4个字符距离）：红色
+			cellStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196")) // 红色
 		}
 
-		// 指针位置显示 "▲"，其他位置显示 "━"
-		if i == pointerPos {
+		// 黄金点位置显示 "|"，指针位置显示 "▲"，其他位置显示 "━"
+		if i == goldenPos {
+			barChars = append(barChars, lipgloss.NewStyle().
+				Foreground(lipgloss.Color("226")).
+				Bold(true).
+				Render("│")) // 黄金点标记为 |
+		} else if i == pointerPos {
 			barChars = append(barChars, lipgloss.NewStyle().
 				Foreground(lipgloss.Color("201")).
 				Bold(true).
 				Render("▲"))
-		} else if i == goldenPos {
-			barChars = append(barChars, cellStyle.Render("◆")) // 黄金点标记
 		} else {
 			barChars = append(barChars, cellStyle.Render("━"))
 		}
@@ -420,26 +437,181 @@ func renderCompactRhythmBar(rhythmBar RhythmBarInfo, effectInfo JudgmentEffectIn
 	bar := strings.Join(barChars, "")
 	lines = append(lines, bar)
 
-	// 第三部分：其他判定特效（Nice/OK/Miss）（固定高度1行）
-	if effectInfo.LastJudgment != "" && effectInfo.LastJudgment != "Perfect" {
-		elapsed := time.Since(effectInfo.LastJudgmentTime)
-		if elapsed < 1*time.Second {
-			effect := renderJudgmentEffect(effectInfo.LastJudgment, elapsed)
-			lines = append(lines, effect)
-		} else {
-			lines = append(lines, "")
-		}
-	} else {
-		lines = append(lines, "")
-	}
+	// 添加箭头行（指向上次判定位置，渐渐消失）- 紧贴节奏条
+	arrowLine := renderJudgmentArrow(effectInfo, barWidth)
+	lines = append(lines, arrowLine)
 
-	return strings.Join(lines, "\n")
+	// 添加下方特效（1行）
+	lines = append(lines, bottomEffect)
+
+	return lines
 }
 
-// renderPerfectExplosion 渲染Perfect爆炸闪烁特效（2行）
-func renderPerfectExplosion(elapsed time.Duration) []string {
+// renderJudgmentArrow 渲染指向上次判定位置的箭头，随时间渐渐消失
+func renderJudgmentArrow(effectInfo JudgmentEffectInfo, barWidth int) string {
+	if effectInfo.LastJudgment == "" {
+		return "" // 没有判定记录，不显示箭头
+	}
+
+	elapsed := time.Since(effectInfo.LastJudgmentTime)
+	const fadeOutDuration = 1500 * time.Millisecond // 箭头在1.5秒内消失
+
+	if elapsed >= fadeOutDuration {
+		return "" // 已经消失
+	}
+
+	// 计算上次判定位置
+	lastJudgmentPos := int(effectInfo.LastJudgmentPosition * float64(barWidth))
+	if lastJudgmentPos < 0 {
+		lastJudgmentPos = 0
+	}
+	if lastJudgmentPos >= barWidth {
+		lastJudgmentPos = barWidth - 1
+	}
+
+	// 构建箭头行：在判定位置显示 "^"，其他位置显示空格
+	var arrowChars []string
+	for i := 0; i < barWidth; i++ {
+		if i == lastJudgmentPos {
+			// 根据判定类型选择箭头颜色
+			var arrowColor lipgloss.Color
+			switch effectInfo.LastJudgment {
+			case "Perfect":
+				arrowColor = lipgloss.Color("226") // 金色
+			case "Nice":
+				arrowColor = lipgloss.Color("33") // 蓝色
+			case "OK":
+				arrowColor = lipgloss.Color("46") // 绿色
+			case "Miss":
+				arrowColor = lipgloss.Color("196") // 红色
+			default:
+				arrowColor = lipgloss.Color("255") // 白色
+			}
+
+			// 计算透明度（通过颜色亮度模拟淡出效果）
+			// elapsed: 0 -> fadeOutDuration, 箭头从亮到暗
+			fadeRatio := float64(elapsed) / float64(fadeOutDuration)
+
+			// 根据淡出程度选择箭头样式
+			style := lipgloss.NewStyle().Foreground(arrowColor)
+			if fadeRatio < 0.5 {
+				style = style.Bold(true) // 前半段加粗
+			}
+
+			arrowChars = append(arrowChars, style.Render("^"))
+		} else {
+			arrowChars = append(arrowChars, " ")
+		}
+	}
+
+	return strings.Join(arrowChars, "")
+}
+
+// renderCurrentWordWithInput 渲染当前单词行，显示 "Input:[    word]" 固定宽度20字符，带颜色编码
+func renderCurrentWordWithInput(targetWord string, userInput string) string {
+	const wordFieldWidth = 20 // 单词显示区域固定宽度
+
+	// 前缀 "Input:[" - 深灰色
+	prefixStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // 深灰色
+	prefix := prefixStyle.Render("Input:[")
+
+	// 渲染目标单词的每个字符，根据用户输入进行颜色编码
+	var wordChars []string
+
+	for i, ch := range targetWord {
+		charStr := string(ch)
+
+		if i < len(userInput) {
+			// 有对应的输入字符
+			if userInput[i] == byte(ch) {
+				// 正确：绿色
+				wordChars = append(wordChars, lipgloss.NewStyle().
+					Foreground(lipgloss.Color("46")).
+					Bold(true).
+					Render(charStr))
+			} else {
+				// 错误：红色
+				wordChars = append(wordChars, lipgloss.NewStyle().
+					Foreground(lipgloss.Color("196")).
+					Bold(true).
+					Render(charStr))
+			}
+		} else {
+			// 未输入的字符：白色
+			wordChars = append(wordChars, lipgloss.NewStyle().
+				Foreground(lipgloss.Color("255")).
+				Render(charStr))
+		}
+	}
+
+	// 将渲染后的单词字符拼接
+	renderedWord := strings.Join(wordChars, "")
+
+	// 计算需要补齐的空格数（单词左侧填充空格，使总宽度为 wordFieldWidth）
+	paddingCount := wordFieldWidth - len(targetWord)
+	if paddingCount < 0 {
+		paddingCount = 0 // 如果单词超长，不补齐
+	}
+	padding := strings.Repeat(" ", paddingCount)
+
+	// 后缀 "]" - 深灰色
+	suffix := prefixStyle.Render("]")
+
+	return prefix + padding + renderedWord + suffix
+}
+
+// renderWordAligned 渲染对齐的单词（非当前行），保持与 Input:[    word] 相同的格式宽度
+func renderWordAligned(word string, color string) string {
+	const wordFieldWidth = 20 // 单词显示区域固定宽度
+	const prefixWidth = 7     // "Input:[" 的长度
+	const suffixWidth = 1     // "]" 的长度
+
+	if word == "" {
+		// 空字符串：返回空格填充，保持格式宽度
+		return strings.Repeat(" ", prefixWidth+wordFieldWidth+suffixWidth)
+	}
+
+	// 前缀：7 个空格（对应 "Input:[" 的位置）
+	prefix := strings.Repeat(" ", prefixWidth)
+
+	// 计算单词左侧填充（右对齐到 wordFieldWidth）
+	paddingCount := wordFieldWidth - len(word)
+	if paddingCount < 0 {
+		paddingCount = 0
+	}
+	padding := strings.Repeat(" ", paddingCount)
+
+	// 渲染单词（带颜色）
+	wordStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+	renderedWord := wordStyle.Render(word)
+
+	// 后缀：1 个空格（对应 "]" 的位置）
+	suffix := strings.Repeat(" ", suffixWidth)
+
+	return prefix + padding + renderedWord + suffix
+}
+
+// renderJudgmentEffects 渲染判定特效（上下对称设计）
+// 返回：上方特效（2行）和下方特效（1行）
+func renderJudgmentEffects(judgment string, elapsed time.Duration) ([]string, string) {
 	ms := elapsed.Milliseconds()
 
+	switch judgment {
+	case "Perfect":
+		return renderPerfectEffect(ms)
+	case "Nice":
+		return renderNiceEffect(ms)
+	case "OK":
+		return renderOKEffect(ms)
+	case "Miss":
+		return renderMissEffect(ms)
+	default:
+		return []string{"", ""}, ""
+	}
+}
+
+// renderPerfectEffect 渲染 Perfect 特效（金色星星，上下闪烁）
+func renderPerfectEffect(ms int64) ([]string, string) {
 	// 闪烁效果：每100ms切换颜色
 	frame := int(ms / 100)
 	var color lipgloss.Color
@@ -457,250 +629,96 @@ func renderPerfectExplosion(elapsed time.Duration) []string {
 		return []string{
 			style.Render("   ✦ ★ PERFECT! ★ ✦   "),
 			style.Render("    ✧    ✧    ✧    "),
-		}
+		}, style.Render("    ✧    ✧    ✧    ")
 	} else if ms < 600 {
 		// 第2阶段：火花四溅
 		return []string{
 			style.Render(" ✧ ★ PERFECT! ★ ✧ "),
 			style.Render("  ✦  ✧  ✦  ✧  ✦  "),
-		}
+		}, style.Render("  ✦  ✧  ✦  ✧  ✦  ")
 	} else {
 		// 第3阶段：逐渐消失
 		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 		return []string{
 			dimStyle.Render("   ★ PERFECT! ★   "),
+			dimStyle.Render("      ✧  ✧      "),
+		}, dimStyle.Render("      ✧  ✧      ")
+	}
+}
+
+// renderNiceEffect 渲染 Nice 特效（蓝色波纹）
+func renderNiceEffect(ms int64) ([]string, string) {
+	// 使用统一的蓝色（33）
+	color := lipgloss.Color("33")
+	style := lipgloss.NewStyle().Foreground(color).Bold(true)
+
+	if ms < 300 {
+		return []string{
+			style.Render("     ～ Nice! ～     "),
+			style.Render("    ≈  ≈  ≈  ≈    "),
+		}, style.Render("    ≈  ≈  ≈  ≈    ")
+	} else if ms < 600 {
+		return []string{
+			style.Render("      Nice!      "),
+			style.Render("     ≈  ≈  ≈     "),
+		}, style.Render("     ≈  ≈  ≈     ")
+	} else {
+		dimStyle := lipgloss.NewStyle().Foreground(color)
+		return []string{
+			dimStyle.Render("      Nice!      "),
+			dimStyle.Render("       ≈  ≈       "),
+		}, dimStyle.Render("       ≈  ≈       ")
+	}
+}
+
+// renderOKEffect 渲染 OK 特效（绿色勾号）
+func renderOKEffect(ms int64) ([]string, string) {
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
+
+	if ms < 400 {
+		return []string{
+			style.Render("       ✓ OK ✓       "),
+			style.Render("                   "),
+		}, style.Render("                   ")
+	} else {
+		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+		return []string{
+			dimStyle.Render("       ✓ OK ✓       "),
 			dimStyle.Render("                   "),
-		}
+		}, dimStyle.Render("                   ")
 	}
 }
 
-// renderWordAndRhythmBar 渲染单词和节奏条（旧版，保留以兼容）
-func renderWordAndRhythmBar(
-	currentWord string,
-	userInput string,
-	rhythmBar RhythmBarInfo,
-	effectInfo JudgmentEffectInfo,
-) []string {
-	var lines []string
-
-	// 左侧：单词显示
-	wordDisplay := renderRhythmDanceWordArea(currentWord, userInput)
-
-	// 右侧：节奏条
-	rhythmBarDisplay := renderRhythmBar(rhythmBar, effectInfo)
-
-	// 合并左右两侧
-	wordLines := strings.Split(wordDisplay, "\n")
-	barLines := strings.Split(rhythmBarDisplay, "\n")
-
-	maxLines := len(wordLines)
-	if len(barLines) > maxLines {
-		maxLines = len(barLines)
-	}
-
-	for i := 0; i < maxLines; i++ {
-		var leftPart, rightPart string
-
-		if i < len(wordLines) {
-			leftPart = wordLines[i]
-		} else {
-			leftPart = strings.Repeat(" ", 35)
-		}
-
-		if i < len(barLines) {
-			rightPart = barLines[i]
-		} else {
-			rightPart = ""
-		}
-
-		line := leftPart + rightPart
-		lines = append(lines, line)
-	}
-
-	return lines
-}
-
-// renderRhythmDanceWordArea 渲染单词和输入（节奏舞蹈模式专用）
-func renderRhythmDanceWordArea(currentWord string, userInput string) string {
-	var lines []string
-
-	// 标题
-	lines = append(lines, "  "+titleStyle.Render("Word:"))
-	lines = append(lines, "")
-
-	// 显示单词（根据输入高亮）
-	var renderedWord string
-	if len(userInput) == 0 {
-		renderedWord = wordStyle.Render(currentWord)
+// renderMissEffect 渲染 Miss 特效（红色警告，上下闪烁）
+func renderMissEffect(ms int64) ([]string, string) {
+	// 闪烁效果
+	frame := int(ms / 150)
+	var color lipgloss.Color
+	if frame%2 == 0 {
+		color = lipgloss.Color("196") // 亮红
 	} else {
-		// 高亮已输入的部分
-		matchLen := len(userInput)
-		if matchLen > len(currentWord) {
-			matchLen = len(currentWord)
-		}
-
-		// 检查是否正确
-		isCorrect := true
-		for i := 0; i < matchLen; i++ {
-			if i >= len(currentWord) || userInput[i] != currentWord[i] {
-				isCorrect = false
-				break
-			}
-		}
-
-		if isCorrect {
-			renderedWord = highlightStyle.Render(currentWord[:matchLen]) +
-				wordStyle.Render(currentWord[matchLen:])
-		} else {
-			// 错误显示为红色
-			errorStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("196")).
-				Bold(true)
-			renderedWord = errorStyle.Render(currentWord)
-		}
+		color = lipgloss.Color("160") // 深红
 	}
 
-	lines = append(lines, "  "+renderedWord)
-	lines = append(lines, "")
+	style := lipgloss.NewStyle().Foreground(color).Bold(true)
 
-	// 输入显示
-	lines = append(lines, "  "+statItemStyle.Render("Input: ")+inputStyle.Render(userInput))
-
-	return strings.Join(lines, "\n")
-}
-
-// renderRhythmBar 渲染节奏条
-func renderRhythmBar(rhythmBar RhythmBarInfo, effectInfo JudgmentEffectInfo) string {
-	var lines []string
-
-	// 节奏条宽度
-	const barWidth = 40
-
-	// 计算指针和黄金点的位置
-	pointerPos := int(rhythmBar.PointerPosition * float64(barWidth))
-	goldenPos := int(rhythmBar.GoldenRatio * float64(barWidth))
-
-	if pointerPos < 0 {
-		pointerPos = 0
-	}
-	if pointerPos >= barWidth {
-		pointerPos = barWidth - 1
-	}
-
-	// 计算距离（用于颜色渐变）
-	distance := math.Abs(rhythmBar.PointerPosition - rhythmBar.GoldenRatio)
-
-	// 根据距离选择指针颜色
-	var pointerStyle lipgloss.Style
-	if distance <= 0.05 {
-		pointerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Bold(true) // 黄色（Perfect）
-	} else if distance <= 0.15 {
-		pointerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true) // 青色（Nice）
-	} else if distance <= 0.30 {
-		pointerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("252")) // 白色（OK）
+	if ms < 300 {
+		return []string{
+			style.Render("    ✗✗ MISS! ✗✗    "),
+			style.Render("    ！  ！  ！    "),
+		}, style.Render("    ！  ！  ！    ")
+	} else if ms < 600 {
+		return []string{
+			style.Render("     ✗ MISS! ✗     "),
+			style.Render("      ！  ！      "),
+		}, style.Render("      ！  ！      ")
 	} else {
-		pointerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // 灰色（Miss）
+		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("160"))
+		return []string{
+			dimStyle.Render("       MISS!       "),
+			dimStyle.Render("                   "),
+		}, dimStyle.Render("                   ")
 	}
-
-	// 渲染节奏条
-	bar := make([]rune, barWidth)
-	for i := 0; i < barWidth; i++ {
-		bar[i] = '─'
-	}
-
-	// 标记黄金分割点
-	bar[goldenPos] = '▼'
-
-	// 标记指针
-	bar[pointerPos] = '◆'
-
-	// 应用颜色
-	var styledBar strings.Builder
-	for i, ch := range bar {
-		if i == pointerPos {
-			styledBar.WriteString(pointerStyle.Render(string(ch)))
-		} else if i == goldenPos {
-			styledBar.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color("226")).
-				Render(string(ch)))
-		} else {
-			// 根据距离黄金点的距离设置颜色渐变
-			distFromGolden := math.Abs(float64(i-goldenPos) / float64(barWidth))
-			var barCharStyle lipgloss.Style
-			if distFromGolden < 0.1 {
-				barCharStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("226")) // 黄色
-			} else if distFromGolden < 0.2 {
-				barCharStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("220")) // 浅黄
-			} else {
-				barCharStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // 灰色
-			}
-			styledBar.WriteString(barCharStyle.Render(string(ch)))
-		}
-	}
-
-	lines = append(lines, "├"+styledBar.String()+"┤")
-
-	// 判定特效显示
-	if effectInfo.LastJudgment != "" {
-		elapsed := time.Since(effectInfo.LastJudgmentTime)
-		if elapsed < 1*time.Second {
-			effectText := renderJudgmentEffect(effectInfo.LastJudgment, elapsed)
-			lines = append(lines, effectText)
-		}
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-// renderJudgmentEffect 渲染判定特效
-func renderJudgmentEffect(judgment string, elapsed time.Duration) string {
-	var effectStyle lipgloss.Style
-	var text string
-
-	switch judgment {
-	case "Perfect":
-		effectStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("226")).
-			Bold(true)
-		text = "★ PERFECT ★"
-	case "Nice":
-		effectStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("51")).
-			Bold(true)
-		text = "✓ Nice!"
-	case "OK":
-		effectStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("252"))
-		text = "○ OK"
-	case "Miss":
-		effectStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196"))
-		text = "✗ Miss..."
-	default:
-		return ""
-	}
-
-	// 文字上浮效果（根据时间偏移）
-	ms := elapsed.Milliseconds()
-	offset := int(ms / 100) // 每100ms上移一行
-
-	var padding string
-	for i := 0; i < offset; i++ {
-		padding += " "
-	}
-
-	// 闪烁效果（前500ms）
-	if ms < 500 && ms%200 < 100 {
-		return lipgloss.NewStyle().
-			Width(42).
-			Align(lipgloss.Center).
-			Render(padding + effectStyle.Render(text))
-	}
-
-	return lipgloss.NewStyle().
-		Width(42).
-		Align(lipgloss.Center).
-		Render(padding + effectStyle.Render(text))
 }
 
 // renderJudgmentCounts 渲染判定计数
@@ -757,7 +775,7 @@ func renderRhythmDanceResultsArea(stats RhythmDanceStats, selectedOption int, an
 		lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Bold(true).Render(fmt.Sprintf("%7d", stats.PerfectCount))))
 	content.WriteString(fmt.Sprintf("%50s %s\n",
 		statItemStyle.Render("Nice:"),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true).Render(fmt.Sprintf("%7d", stats.NiceCount))))
+		lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Bold(true).Render(fmt.Sprintf("%7d", stats.NiceCount))))
 	content.WriteString(fmt.Sprintf("%50s %s\n",
 		statItemStyle.Render("OK:"),
 		statValueStyle.Render(fmt.Sprintf("%7d", stats.OKCount))))

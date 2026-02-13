@@ -14,5 +14,6 @@
   "rhythm_difficulty_step": 0.1,
   "rhythm_words_per_level": 10,
   "rhythm_dance_duration": 60,
-  "rhythm_dance_initial_speed": 0.05
+  "rhythm_dance_initial_speed": 0.05,
+  "rhythm_dance_speed_increment": 0.005
 }
