@@ -25,14 +25,20 @@ Word Killer 是一个基于命令行的打字游戏，通过消除屏幕上的�
 ### 编译
 
 ```bash
+make build        # 输出到 build/（包含 word-killer.exe、config.json、data/）
+# 或直接使用 go build
 go build -o word-killer.exe ./cmd/word-killer
 ```
 
 ### 运行
 
 ```bash
+make run          # 编译并在 build/ 目录内运行
+# 或
 ./word-killer.exe
 ```
+
+执行 `make help` 可以查看全部目标（test、clean、build-all 等）。
 
 ## 游戏玩法
 

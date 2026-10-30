@@ -26,3 +26,6 @@ go.work
 # OS
 .DS_Store
 Thumbs.db
+
+# Build output (make build copies data/ and config.json into it)
+build/
