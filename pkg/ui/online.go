@@ -16,9 +16,15 @@ const (
 )
 
 var (
-	onlineErrorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
-	onlineSelfStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Bold(true)
+	onlineErrorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+	onlineSelfStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Bold(true)
+	onlineDisabledStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
+
+// maxListedRooms keeps the menu at the standard height; the list scrolls to
+// keep the selection visible, with one line each reserved for the scroll hint
+// and the notice
+const maxListedRooms = 6
 
 // renderOnlineScreen lays out the standard header, content box and hints
 func renderOnlineScreen(header string, lines []string, hints string) string {
@@ -42,56 +48,72 @@ func centerLine(text string) string {
 	return lipgloss.NewStyle().Width(onlineInnerWidth).Align(lipgloss.Center).Render(text)
 }
 
-// RenderOnlineMenu renders the Create Room / Join Room menu
-func RenderOnlineMenu(selected int, notice string, animFrame int) string {
+// roomStatusLabel describes whether a room can be joined
+func roomStatusLabel(r online.RoomInfo) string {
+	switch {
+	case r.InGame:
+		return "In game"
+	case r.Full():
+		return "Full"
+	}
+	return "Waiting"
+}
+
+// RenderOnlineMenu renders Create Room followed by the rooms found on the LAN.
+// selected is 0 for Create Room, or 1+i for rooms[i].
+func RenderOnlineMenu(rooms []online.RoomInfo, selected int, notice string, connecting bool, animFrame int) string {
 	selectedStyle := lipgloss.NewStyle().Foreground(getRandomMenuColor(animFrame)).Bold(true)
 
 	lines := []string{""}
-	for i, opt := range []string{"Create Room", "Join Room", "Back"} {
-		if i == selected {
-			lines = append(lines, centerLine(selectedStyle.Render("> "+opt+" <")))
-		} else {
-			lines = append(lines, centerLine(menuNormalStyle.Render("  "+opt+"  ")))
+	if selected == 0 {
+		lines = append(lines, centerLine(selectedStyle.Render("> Create Room <")))
+	} else {
+		lines = append(lines, centerLine(menuNormalStyle.Render("  Create Room  ")))
+	}
+
+	lines = append(lines, "", centerLine(separatorStyle.Render("──────────── ")+
+		titleStyle.Render("Rooms on your network")+separatorStyle.Render(" ────────────")))
+
+	if len(rooms) == 0 {
+		lines = append(lines, centerLine(statsStyle.Render("Searching for rooms...")))
+	}
+
+	// Scroll so the selected room stays inside the visible window
+	first := 0
+	if selected > maxListedRooms {
+		first = selected - maxListedRooms
+	}
+	last := min(first+maxListedRooms, len(rooms))
+	for i := first; i < last; i++ {
+		r := rooms[i]
+		text := fmt.Sprintf("%-12s %d/%d  %-8s %-15s", r.HostName, r.Players, r.MaxPlayers, roomStatusLabel(r), r.IP)
+		switch {
+		case selected == i+1:
+			lines = append(lines, centerLine(selectedStyle.Render("> "+text+" <")))
+		case !r.Joinable():
+			lines = append(lines, centerLine(onlineDisabledStyle.Render("  "+text+"  ")))
+		default:
+			lines = append(lines, centerLine(menuNormalStyle.Render("  "+text+"  ")))
 		}
 	}
-	if notice != "" {
-		lines = append(lines, "", centerLine(onlineErrorStyle.Render(notice)))
+	if hidden := len(rooms) - (last - first); hidden > 0 {
+		lines = append(lines, centerLine(statsStyle.Render(fmt.Sprintf("%d more room(s), use ↑↓ to scroll", hidden))))
+	}
+
+	switch {
+	case connecting:
+		lines = append(lines, centerLine(statsStyle.Render("Connecting...")))
+	case notice != "":
+		lines = append(lines, centerLine(onlineErrorStyle.Render(notice)))
 	}
 
 	return renderOnlineScreen("Online", lines, "[↑↓] Select  │  [Enter] Confirm  │  [ESC] Back")
 }
 
-// RenderJoinForm renders the host IP and room number form
-func RenderJoinForm(host, room string, focus int, notice string, connecting bool) string {
-	field := func(label, value string, focused bool) string {
-		text := fmt.Sprintf("%-14s", label)
-		if focused {
-			return centerLine(highlightStyle.Render("> ") + statItemStyle.Render(text) + inputStyle.Render(fmt.Sprintf("%-24s", value+"_")))
-		}
-		return centerLine("  " + statItemStyle.Render(text) + wordStyle.Render(fmt.Sprintf("%-24s", value)))
-	}
-
-	lines := []string{
-		"",
-		field("Host IP:", host, focus == 0),
-		"",
-		field("Room number:", room, focus == 1),
-		"",
-	}
-	if connecting {
-		lines = append(lines, centerLine(statsStyle.Render("Connecting...")))
-	} else if notice != "" {
-		lines = append(lines, centerLine(onlineErrorStyle.Render(notice)))
-	}
-
-	return renderOnlineScreen("Join Room", lines, "[Tab/↑↓] Switch  │  [Enter] Join  │  [ESC] Back")
-}
-
 // RenderLobby renders the room lobby
 func RenderLobby(b *online.Battle, address, notice string, editingName bool, nameInput string) string {
 	lines := []string{
-		statItemStyle.Render("Room: ") + statValueStyle.Render(b.Room) +
-			statItemStyle.Render("    Address: ") + statValueStyle.Render(address),
+		statItemStyle.Render("Host: ") + statValueStyle.Render(address),
 		statItemStyle.Render("Mode: ") + statValueStyle.Render(online.ModeName(b.Mode)),
 		"",
 		titleStyle.Render(fmt.Sprintf("Players (%d/%d):", len(b.Players), online.MaxPlayers)),
@@ -126,7 +148,7 @@ func RenderLobby(b *online.Battle, address, notice string, editingName bool, nam
 		hints = "Type your name  │  [Enter] Save  │  [ESC] Cancel"
 	}
 
-	return renderOnlineScreen("Room "+b.Room, lines, hints)
+	return renderOnlineScreen("Room", lines, hints)
 }
 
 // renderScoreBar renders every player's name and score on one line

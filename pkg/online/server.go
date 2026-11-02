@@ -2,8 +2,10 @@ package online
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
-	"math/rand"
 	"net"
 	"sort"
 	"strings"
@@ -64,12 +66,21 @@ type serverEvent struct {
 	gone bool
 }
 
+// roomStatus is what discovery replies report; run publishes it, and the
+// UDP responder reads it
+type roomStatus struct {
+	hostName string
+	players  int
+	inGame   bool
+}
+
 // Server hosts one room. All game state is owned by the run goroutine,
 // so claims and timers are handled strictly one at a time.
 type Server struct {
 	cfg      ServerConfig
-	room     string
+	roomID   string
 	listener net.Listener
+	udp      *net.UDPConn
 	events   chan serverEvent
 	closeCh  chan struct{}
 	done     chan struct{}
@@ -83,19 +94,23 @@ type Server struct {
 	current int
 	timer   *time.Timer
 	timerC  <-chan time.Time
+
+	statusMu sync.Mutex
+	status   roomStatus
 }
 
 // NewServer starts listening and returns a running room server
 func NewServer(cfg ServerConfig) (*Server, error) {
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", cfg.Host, cfg.Port))
+	listener, udp, err := listenPair(cfg.Host, cfg.Port)
 	if err != nil {
 		return nil, fmt.Errorf("cannot listen on port %d: %w", cfg.Port, err)
 	}
 
 	s := &Server{
 		cfg:      cfg,
-		room:     fmt.Sprintf("%04d", rand.Intn(10000)),
+		roomID:   newRoomID(),
 		listener: listener,
+		udp:      udp,
 		events:   make(chan serverEvent, eventBufferSize),
 		closeCh:  make(chan struct{}),
 		done:     make(chan struct{}),
@@ -104,13 +119,43 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	}
 
 	go s.acceptLoop()
+	go s.discoveryLoop()
 	go s.run()
 	return s, nil
 }
 
-// Room returns the 4-digit room number
-func (s *Server) Room() string {
-	return s.room
+// listenPair opens the TCP game port and the UDP discovery port with the same
+// number, since players broadcast queries to the port they would connect to.
+// With port 0 the system picks the TCP port, whose UDP twin may be taken, so a
+// few picks are tried; a fixed port gets exactly one attempt.
+func listenPair(host string, port int) (net.Listener, *net.UDPConn, error) {
+	attempts := 1
+	if port == 0 {
+		attempts = 10
+	}
+
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		listener, err := net.Listen("tcp4", fmt.Sprintf("%s:%d", host, port))
+		if err != nil {
+			return nil, nil, err
+		}
+		tcpPort := listener.Addr().(*net.TCPAddr).Port
+		udp, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP(host), Port: tcpPort})
+		if err == nil {
+			return listener, udp, nil
+		}
+		listener.Close()
+		lastErr = err
+	}
+	return nil, nil, lastErr
+}
+
+// newRoomID returns a random identifier used to de-duplicate discovery replies
+func newRoomID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // Port returns the port actually being listened on
@@ -179,9 +224,64 @@ func (s *Server) run() {
 	}
 }
 
+// discoveryLoop answers discover queries until the UDP socket is closed
+func (s *Server) discoveryLoop() {
+	buf := make([]byte, maxDiscoveryPacket+1)
+	for {
+		n, from, err := s.udp.ReadFromUDP(buf)
+		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
+			// Any stray packet, such as an oversized one, must not stop discovery
+			continue
+		}
+		msg, ok := decodeDiscovery(buf[:n])
+		if !ok || msg.Type != TypeDiscover {
+			continue
+		}
+
+		s.statusMu.Lock()
+		status := s.status
+		s.statusMu.Unlock()
+		// Not discoverable until the host has joined its own room
+		if status.players == 0 {
+			continue
+		}
+
+		reply, err := encodeMessage(Message{
+			Type:       TypeRoomInfo,
+			Version:    ProtocolVersion,
+			RoomID:     s.roomID,
+			Name:       status.hostName,
+			Port:       s.Port(),
+			PlayerNum:  status.players,
+			MaxPlayers: MaxPlayers,
+			InGame:     status.inGame,
+		})
+		if err == nil {
+			s.udp.WriteToUDP(reply, from)
+		}
+	}
+}
+
+// publishStatus records the room state for discovery replies
+func (s *Server) publishStatus() {
+	status := roomStatus{players: len(s.players), inGame: s.phase != phaseLobby}
+	for _, p := range s.players {
+		if p.id == hostPlayerID {
+			status.hostName = p.name
+		}
+	}
+	s.statusMu.Lock()
+	s.status = status
+	s.statusMu.Unlock()
+}
+
 func (s *Server) shutdown() {
 	s.stopTimer()
 	s.listener.Close()
+	s.udp.Close()
 	for _, p := range s.players {
 		if p.connected {
 			s.send(p, Message{Type: TypeHostClosed})
@@ -191,6 +291,9 @@ func (s *Server) shutdown() {
 }
 
 func (s *Server) handleEvent(ev serverEvent) {
+	// Every event may change the players or phase that discovery reports
+	defer s.publishStatus()
+
 	player := s.playerByConn(ev.conn)
 
 	if ev.gone {
@@ -236,8 +339,8 @@ func (s *Server) handleJoin(conn net.Conn, msg Message) {
 		conn.Close()
 	}
 
-	if msg.Type != TypeJoin || msg.Room != s.room {
-		reject(ReasonBadRoom)
+	if msg.Type != TypeJoin || msg.Version != ProtocolVersion {
+		reject(ReasonVersionMismatch)
 		return
 	}
 	if s.phase != phaseLobby {
@@ -258,7 +361,7 @@ func (s *Server) handleJoin(conn net.Conn, msg Message) {
 	s.nextID++
 	s.players = append(s.players, player)
 
-	s.send(player, Message{Type: TypeJoinAccepted, PlayerID: player.id, Room: s.room})
+	s.send(player, Message{Type: TypeJoinAccepted, PlayerID: player.id})
 	s.broadcastLobby()
 }
 
@@ -310,6 +413,8 @@ func (s *Server) startGame() {
 }
 
 func (s *Server) handleTimer() {
+	defer s.publishStatus()
+
 	switch s.phase {
 	case phaseCountdown:
 		s.spawnWord()

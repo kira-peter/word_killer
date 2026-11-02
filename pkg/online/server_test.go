@@ -36,7 +36,7 @@ func testAddr(s *Server) string {
 
 func joinTest(t *testing.T, s *Server, name string) *Client {
 	t.Helper()
-	c, err := Connect(testAddr(s), s.Room(), name)
+	c, err := Connect(testAddr(s), name)
 	if err != nil {
 		t.Fatalf("Connect(%s): %v", name, err)
 	}
@@ -117,9 +117,6 @@ func TestJoinSuccess(t *testing.T) {
 	if guest.PlayerID == hostPlayerID {
 		t.Error("guest must not get the host id")
 	}
-	if len(s.Room()) != 4 {
-		t.Errorf("room %q is not 4 digits", s.Room())
-	}
 	waitForLobbySize(t, host, 2)
 }
 
@@ -131,14 +128,41 @@ func assertRejected(t *testing.T, err error, reason string) {
 	}
 }
 
-func TestJoinWrongRoom(t *testing.T) {
-	s := startTestServer(t, time.Second)
-	wrong := "0000"
-	if s.Room() == wrong {
-		wrong = "0001"
+// joinWithVersion sends a raw join with the given protocol version
+func joinWithVersion(t *testing.T, s *Server, version int) Message {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp", testAddr(s), time.Second)
+	if err != nil {
+		t.Fatal(err)
 	}
-	_, err := Connect(testAddr(s), wrong, "Guest")
-	assertRejected(t, err, ReasonBadRoom)
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(2 * time.Second))
+	if err := writeMessage(conn, Message{Type: TypeJoin, Version: version, Name: "Old"}); err != nil {
+		t.Fatal(err)
+	}
+	reply, err := readMessage(bufio.NewScanner(conn))
+	if err != nil {
+		t.Fatalf("readMessage: %v", err)
+	}
+	return reply
+}
+
+func TestJoinVersionMismatch(t *testing.T) {
+	s := startTestServer(t, time.Second)
+
+	// Version 0 is what 2.0.0 clients send, since they had no version field
+	for _, version := range []int{0, ProtocolVersion + 1} {
+		reply := joinWithVersion(t, s, version)
+		if reply.Type != TypeJoinRejected || reply.Reason != ReasonVersionMismatch {
+			t.Errorf("version %d: reply = %+v", version, reply)
+		}
+	}
+
+	var rejected RejectedError
+	rejected.Reason = ReasonVersionMismatch
+	if rejected.Error() != "Version mismatch" {
+		t.Errorf("message = %q", rejected.Error())
+	}
 }
 
 func TestJoinRoomFull(t *testing.T) {
@@ -146,7 +170,7 @@ func TestJoinRoomFull(t *testing.T) {
 	for i := 0; i < MaxPlayers; i++ {
 		joinTest(t, s, "P"+strconv.Itoa(i))
 	}
-	_, err := Connect(testAddr(s), s.Room(), "Late")
+	_, err := Connect(testAddr(s), "Late")
 	assertRejected(t, err, ReasonRoomFull)
 }
 
@@ -155,7 +179,7 @@ func TestJoinInGame(t *testing.T) {
 	host, _ := startTwoPlayerGame(t, s)
 	waitFor(t, host, TypeGameStart)
 
-	_, err := Connect(testAddr(s), s.Room(), "Late")
+	_, err := Connect(testAddr(s), "Late")
 	assertRejected(t, err, ReasonInGame)
 }
 
@@ -168,7 +192,7 @@ func TestConnectFailure(t *testing.T) {
 	addr := l.Addr().String()
 	l.Close()
 
-	_, err = Connect(addr, "1234", "Guest")
+	_, err = Connect(addr, "Guest")
 	if !errors.Is(err, ErrCannotConnect) {
 		t.Fatalf("err = %v, want ErrCannotConnect", err)
 	}
@@ -373,7 +397,7 @@ func TestSanitizeName(t *testing.T) {
 }
 
 func TestBattleSubmit(t *testing.T) {
-	b := NewBattle(2, "1234")
+	b := NewBattle(2)
 	b.Apply(Message{Type: TypeLobby, Players: []PlayerInfo{{ID: 1, Name: "Host", IsHost: true}, {ID: 2, Name: "Guest"}}, Mode: ModeWordDrop}, time.Now())
 
 	// Typing before a word is falling is ignored
@@ -409,7 +433,7 @@ func TestBattleSubmit(t *testing.T) {
 }
 
 func TestBattleTiming(t *testing.T) {
-	b := NewBattle(1, "1234")
+	b := NewBattle(1)
 	start := time.Now()
 
 	b.Apply(Message{Type: TypeGameStart, TotalWords: 10, CountdownMs: 3000}, start)

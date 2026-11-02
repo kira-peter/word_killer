@@ -20,7 +20,6 @@ const (
 // It is driven by server messages and owned by the UI goroutine.
 type Battle struct {
 	MyID    int
-	Room    string
 	Phase   BattlePhase
 	Players []PlayerInfo
 	Mode    string
@@ -44,8 +43,8 @@ type Battle struct {
 }
 
 // NewBattle creates the state for a freshly joined room
-func NewBattle(myID int, room string) *Battle {
-	return &Battle{MyID: myID, Room: room, Mode: ModeWordDrop, Scores: make(map[int]int)}
+func NewBattle(myID int) *Battle {
+	return &Battle{MyID: myID, Mode: ModeWordDrop, Scores: make(map[int]int)}
 }
 
 // IsHost reports whether the local player is the host

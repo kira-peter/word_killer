@@ -26,8 +26,8 @@ type RejectedError struct {
 
 func (e *RejectedError) Error() string {
 	switch e.Reason {
-	case ReasonBadRoom:
-		return "Room not found"
+	case ReasonVersionMismatch:
+		return "Version mismatch"
 	case ReasonRoomFull:
 		return "Room is full"
 	case ReasonInGame:
@@ -39,7 +39,6 @@ func (e *RejectedError) Error() string {
 // Client is a connection to a room server
 type Client struct {
 	PlayerID int
-	Room     string
 
 	conn     net.Conn
 	incoming chan Message
@@ -48,14 +47,14 @@ type Client struct {
 }
 
 // Connect dials a room server and completes the join handshake
-func Connect(addr, room, name string) (*Client, error) {
+func Connect(addr, name string) (*Client, error) {
 	conn, err := net.DialTimeout("tcp", addr, DialTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCannotConnect, err)
 	}
 
 	conn.SetDeadline(time.Now().Add(DialTimeout))
-	if err := writeMessage(conn, Message{Type: TypeJoin, Room: room, Name: name}); err != nil {
+	if err := writeMessage(conn, Message{Type: TypeJoin, Version: ProtocolVersion, Name: name}); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("%w: %v", ErrCannotConnect, err)
 	}
@@ -74,7 +73,6 @@ func Connect(addr, room, name string) (*Client, error) {
 
 	c := &Client{
 		PlayerID: reply.PlayerID,
-		Room:     reply.Room,
 		conn:     conn,
 		incoming: make(chan Message, incomingBufferSize),
 		closed:   make(chan struct{}),

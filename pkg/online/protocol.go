@@ -9,6 +9,10 @@ import (
 	"net"
 )
 
+// ProtocolVersion must match between host and players; bump it whenever the
+// wire format changes incompatibly. Version 2.0.0 sent no version (zero).
+const ProtocolVersion = 2
+
 // Message types exchanged between client and server
 const (
 	TypeJoin         = "join"
@@ -29,13 +33,17 @@ const (
 
 	// TypeDisconnected is synthesized locally by Client when the connection drops
 	TypeDisconnected = "disconnected"
+
+	// LAN discovery, one message per UDP packet
+	TypeDiscover = "discover"
+	TypeRoomInfo = "room_info"
 )
 
 // Reasons carried by join_rejected
 const (
-	ReasonBadRoom  = "bad_room"
-	ReasonRoomFull = "room_full"
-	ReasonInGame   = "in_game"
+	ReasonVersionMismatch = "version_mismatch"
+	ReasonRoomFull        = "room_full"
+	ReasonInGame          = "in_game"
 )
 
 // Online game modes
@@ -73,7 +81,7 @@ type RankEntry struct {
 // Message is the single wire format; only the fields relevant to Type are set
 type Message struct {
 	Type        string       `json:"type"`
-	Room        string       `json:"room,omitempty"`
+	Version     int          `json:"version,omitempty"`
 	Name        string       `json:"name,omitempty"`
 	PlayerID    int          `json:"player_id,omitempty"`
 	Reason      string       `json:"reason,omitempty"`
@@ -87,6 +95,13 @@ type Message struct {
 	Points      int          `json:"points,omitempty"`
 	Ranking     []RankEntry  `json:"ranking,omitempty"`
 	Winners     []int        `json:"winners,omitempty"`
+
+	// Discovery fields carried by room_info
+	RoomID     string `json:"room_id,omitempty"`
+	Port       int    `json:"port,omitempty"`
+	PlayerNum  int    `json:"player_num,omitempty"`
+	MaxPlayers int    `json:"max_players,omitempty"`
+	InGame     bool   `json:"in_game,omitempty"`
 }
 
 // encodeMessage returns the newline-delimited JSON form of a message

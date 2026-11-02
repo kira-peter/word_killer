@@ -19,8 +19,6 @@ const (
 	onlineStartCountdown = 3 * time.Second
 	onlineNextWordDelay  = 1 * time.Second
 	onlineLoopbackHost   = "127.0.0.1"
-	maxHostLength        = 64
-	roomNumberLength     = 4
 )
 
 // onlineScreen identifies which online screen is showing
@@ -28,36 +26,23 @@ type onlineScreen int
 
 const (
 	onlineNone onlineScreen = iota
-	onlineMenu
-	onlineJoinForm
+	onlineMenu // Create Room plus the rooms found on the LAN
 	onlineRoom // lobby, battle or result, depending on battle.Phase
-)
-
-// Online menu options
-const (
-	onlineMenuCreate = iota
-	onlineMenuJoin
-	onlineMenuBack
-	onlineMenuCount
-)
-
-// Join form fields
-const (
-	joinFieldHost = iota
-	joinFieldRoom
-	joinFieldCount
 )
 
 // onlineState holds everything the online screens need
 type onlineState struct {
 	screen     onlineScreen
-	menuIndex  int
 	notice     string // shown on the current screen until the next action
-	host       string
-	room       string
-	joinField  int
 	connecting bool
 	address    string // host:port shown in the lobby
+
+	// The menu lists Create Room, then rooms. The selection is tracked by room
+	// ID so it stays on the same room as the list refreshes; "" is Create Room.
+	browser      *online.Browser
+	rooms        []online.RoomInfo
+	selectedRoom string
+	joiningRoom  online.RoomInfo
 
 	editingName bool // the local player is renaming in the lobby
 	nameInput   string
@@ -73,10 +58,43 @@ type joinResultMsg struct {
 	err    error
 }
 
+// openMenu shows the online menu and starts looking for rooms
+func (o *onlineState) openMenu(port int, notice string) {
+	o.screen = onlineMenu
+	o.notice = notice
+	o.selectedRoom = ""
+	o.rooms = nil
+	if o.browser == nil {
+		browser, err := online.NewBrowser(port)
+		if err != nil {
+			o.notice = "Cannot search for rooms"
+			return
+		}
+		o.browser = browser
+	}
+}
+
+// stopBrowsing stops looking for rooms
+func (o *onlineState) stopBrowsing() {
+	if o.browser != nil {
+		o.browser.Close()
+		o.browser = nil
+	}
+	o.rooms = nil
+}
+
+// closeMenu leaves the online screens for the welcome screen
+func (o *onlineState) closeMenu() {
+	o.stopBrowsing()
+	o.notice = ""
+	o.screen = onlineNone
+}
+
 // enterRoom switches to the room screen using an established connection
 func (o *onlineState) enterRoom(client *online.Client, address string) {
+	o.stopBrowsing()
 	o.client = client
-	o.battle = online.NewBattle(client.PlayerID, client.Room)
+	o.battle = online.NewBattle(client.PlayerID)
 	o.address = address
 	o.screen = onlineRoom
 	o.notice = ""
@@ -84,16 +102,38 @@ func (o *onlineState) enterRoom(client *online.Client, address string) {
 }
 
 // leaveRoom releases the connection and server, then returns to the online menu
-func (o *onlineState) leaveRoom(notice string) {
+func (m model) leaveRoom(notice string) {
+	o := m.online
 	o.closeConnections()
 	o.battle = nil
 	o.editingName = false
-	o.screen = onlineMenu
-	o.menuIndex = 0
-	o.notice = notice
+	o.openMenu(m.cfg.OnlinePort, notice)
+}
+
+// selectedIndex returns the menu position of the selection: 0 is Create Room
+func (o *onlineState) selectedIndex() int {
+	for i, r := range o.rooms {
+		if r.ID == o.selectedRoom {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// refreshRooms takes a new room snapshot. A selected room that disappeared
+// falls back to Create Room.
+func (o *onlineState) refreshRooms() {
+	if o.browser == nil {
+		return
+	}
+	o.rooms = o.browser.Rooms()
+	if o.selectedRoom != "" && o.selectedIndex() == 0 {
+		o.selectedRoom = ""
+	}
 }
 
 func (o *onlineState) closeConnections() {
+	o.stopBrowsing()
 	// Close the server first so other players are told the room is gone
 	if o.server != nil {
 		o.server.Close()
@@ -121,7 +161,7 @@ func (m model) createRoom() {
 	}
 
 	loopback := net.JoinHostPort(onlineLoopbackHost, strconv.Itoa(server.Port()))
-	client, err := online.Connect(loopback, server.Room(), m.cfg.OnlinePlayerName)
+	client, err := online.Connect(loopback, m.cfg.OnlinePlayerName)
 	if err != nil {
 		server.Close()
 		m.online.notice = "Cannot open room on port " + strconv.Itoa(m.cfg.OnlinePort)
@@ -133,15 +173,22 @@ func (m model) createRoom() {
 }
 
 // joinCmd connects in the background so the UI keeps rendering meanwhile
-func joinCmd(address, room, name string) tea.Cmd {
+func joinCmd(address, name string) tea.Cmd {
 	return func() tea.Msg {
-		client, err := online.Connect(address, room, name)
+		client, err := online.Connect(address, name)
 		return joinResultMsg{client: client, err: err}
 	}
 }
 
 func (m model) handleJoinResult(msg joinResultMsg) {
 	m.online.connecting = false
+	// The player may have left the menu while connecting
+	if m.online.screen != onlineMenu {
+		if msg.client != nil {
+			msg.client.Close()
+		}
+		return
+	}
 	if msg.err != nil {
 		var rejected *online.RejectedError
 		if errors.As(msg.err, &rejected) {
@@ -151,13 +198,15 @@ func (m model) handleJoinResult(msg joinResultMsg) {
 		}
 		return
 	}
-	address := net.JoinHostPort(m.online.host, strconv.Itoa(m.cfg.OnlinePort))
-	m.online.enterRoom(msg.client, address)
+	m.online.enterRoom(msg.client, m.online.joiningRoom.Address())
 }
 
 // pollOnline applies pending server messages; called on every tick
 func (m model) pollOnline() {
 	o := m.online
+	if o.screen == onlineMenu {
+		o.refreshRooms()
+	}
 	if o.client == nil {
 		return
 	}
@@ -165,10 +214,10 @@ func (m model) pollOnline() {
 	for _, msg := range o.client.Poll() {
 		switch msg.Type {
 		case online.TypeHostClosed:
-			o.leaveRoom("Host closed the room")
+			m.leaveRoom("Host closed the room")
 			return
 		case online.TypeDisconnected:
-			o.leaveRoom("Connection lost")
+			m.leaveRoom("Connection lost")
 			return
 		default:
 			o.battle.Apply(msg, now)
@@ -189,8 +238,6 @@ func (m model) handleOnlineKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.online.screen {
 	case onlineMenu:
 		return m.handleOnlineMenuKey(msg)
-	case onlineJoinForm:
-		return m.handleJoinFormKey(msg)
 	case onlineRoom:
 		return m.handleRoomKey(msg)
 	}
@@ -199,79 +246,49 @@ func (m model) handleOnlineKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m model) handleOnlineMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	o := m.online
-	switch msg.String() {
-	case "up", "k":
-		o.menuIndex = (o.menuIndex - 1 + onlineMenuCount) % onlineMenuCount
-	case "down", "j":
-		o.menuIndex = (o.menuIndex + 1) % onlineMenuCount
-	case "enter":
-		o.notice = ""
-		switch o.menuIndex {
-		case onlineMenuCreate:
-			m.createRoom()
-		case onlineMenuJoin:
-			o.screen = onlineJoinForm
-			o.joinField = joinFieldHost
-			o.room = ""
-		case onlineMenuBack:
-			o.screen = onlineNone
-		}
-	case "esc":
-		o.notice = ""
-		o.screen = onlineNone
-	}
-	return m, nil
-}
-
-func (m model) handleJoinFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	o := m.online
 	// A join is in flight; its result arrives as joinResultMsg
 	if o.connecting {
 		return m, nil
 	}
 
+	// Positions: 0 is Create Room, 1..len(rooms) are the rooms
+	count := len(o.rooms) + 1
 	switch msg.String() {
-	case "esc":
-		o.notice = ""
-		o.screen = onlineMenu
-	case "tab", "down":
-		o.joinField = (o.joinField + 1) % joinFieldCount
-	case "shift+tab", "up":
-		o.joinField = (o.joinField - 1 + joinFieldCount) % joinFieldCount
-	case "backspace":
-		if o.joinField == joinFieldHost && len(o.host) > 0 {
-			o.host = o.host[:len(o.host)-1]
-		} else if o.joinField == joinFieldRoom && len(o.room) > 0 {
-			o.room = o.room[:len(o.room)-1]
-		}
+	case "up", "k":
+		o.selectRoomAt((o.selectedIndex() - 1 + count) % count)
+	case "down", "j":
+		o.selectRoomAt((o.selectedIndex() + 1) % count)
 	case "enter":
-		if o.host == "" {
-			o.notice = "Please enter the host IP"
-			o.joinField = joinFieldHost
-			return m, nil
-		}
-		if len(o.room) != roomNumberLength {
-			o.notice = "Room number must be 4 digits"
-			o.joinField = joinFieldRoom
-			return m, nil
-		}
 		o.notice = ""
-		o.connecting = true
-		address := net.JoinHostPort(o.host, strconv.Itoa(m.cfg.OnlinePort))
-		return m, joinCmd(address, o.room, m.cfg.OnlinePlayerName)
-	default:
-		// msg.Runes may hold several characters when pasting or typing fast
-		for _, r := range msg.Runes {
-			if o.joinField == joinFieldHost {
-				if r > ' ' && r <= '~' && len(o.host) < maxHostLength {
-					o.host += string(r)
-				}
-			} else if r >= '0' && r <= '9' && len(o.room) < roomNumberLength {
-				o.room += string(r)
-			}
+		index := o.selectedIndex()
+		if index == 0 {
+			m.createRoom()
+			return m, nil
 		}
+		room := o.rooms[index-1]
+		switch {
+		case room.InGame:
+			o.notice = "Game in progress"
+		case room.Full():
+			o.notice = "Room is full"
+		default:
+			o.connecting = true
+			o.joiningRoom = room
+			return m, joinCmd(room.Address(), m.cfg.OnlinePlayerName)
+		}
+	case "esc":
+		o.closeMenu()
 	}
 	return m, nil
+}
+
+// selectRoomAt moves the selection to a menu position: 0 is Create Room
+func (o *onlineState) selectRoomAt(index int) {
+	if index == 0 {
+		o.selectedRoom = ""
+	} else {
+		o.selectedRoom = o.rooms[index-1].ID
+	}
 }
 
 func (m model) handleRoomKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -283,7 +300,7 @@ func (m model) handleRoomKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if key == "esc" {
-		o.leaveRoom("")
+		m.leaveRoom("")
 		return m, nil
 	}
 
@@ -381,9 +398,7 @@ func (m model) onlineView() string {
 	o := m.online
 	switch o.screen {
 	case onlineMenu:
-		return ui.RenderOnlineMenu(o.menuIndex, o.notice, m.animFrame)
-	case onlineJoinForm:
-		return ui.RenderJoinForm(o.host, o.room, o.joinField, o.notice, o.connecting)
+		return ui.RenderOnlineMenu(o.rooms, o.selectedIndex(), o.notice, o.connecting, m.animFrame)
 	case onlineRoom:
 		switch o.battle.Phase {
 		case online.BattleLobby:

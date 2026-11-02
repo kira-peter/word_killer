@@ -146,9 +146,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.selectedMode = 0
 			} else if m.welcomeAnimState.SelectedOption == 1 {
 				// Online selected
-				m.online.screen = onlineMenu
-				m.online.menuIndex = 0
-				m.online.notice = ""
+				m.online.openMenu(m.cfg.OnlinePort, "")
 			} else {
 				// About selected
 				m.showAbout = true
