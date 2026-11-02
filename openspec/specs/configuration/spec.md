@@ -1,7 +1,7 @@
 # configuration Specification
 
 ## Purpose
-TBD - created by archiving change add-word-difficulty-control. Update Purpose after archive.
+Defines the configuration file fields and their defaults: difficulty ratios, dictionary paths, per-mode parameters and online settings. Missing or invalid values fall back to built-in defaults.
 
 ## Requirements
 

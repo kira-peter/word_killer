@@ -1,7 +1,7 @@
 # ui-rendering Specification
 
 ## Purpose
-TBD - created by archiving change add-classic-game-mode. Update Purpose after archive.
+Defines terminal rendering for every screen (welcome, mode selection, game, pause, results and online), covering layout, highlighting, statistics display and refresh rate.
 
 ## Requirements
 

@@ -1,7 +1,7 @@
 # rhythm-timing Specification
 
 ## Purpose
-TBD - created by archiving change add-rhythm-dance-mode. Update Purpose after archive.
+Defines the Rhythm Dance pointer: how it moves, where the golden-ratio target sits, and how its position maps to Perfect/Nice/OK/Miss judgments and scores.
 ## Requirements
 ### Requirement: Rhythm Timing Pointer Control
 系统 SHALL 管理节奏指针的位置和摆动。

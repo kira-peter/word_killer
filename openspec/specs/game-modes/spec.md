@@ -1,7 +1,7 @@
 # game-modes Specification
 
 ## Purpose
-TBD - created by archiving change add-time-challenge-modes. Update Purpose after archive.
+Defines the single-player modes (Classic, Sentence, Countdown, Speed Run, Rhythm Master, Underwater Countdown, Rhythm Dance): how each starts, keeps time, ramps difficulty and ends.
 ## Requirements
 ### Requirement: Time Challenge Game Modes
 The system SHALL support three time-constrained game modes to provide diverse challenge types.

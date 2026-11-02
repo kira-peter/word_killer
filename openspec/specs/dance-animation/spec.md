@@ -1,7 +1,7 @@
 # dance-animation Specification
 
 ## Purpose
-TBD - created by archiving change add-rhythm-dance-mode. Update Purpose after archive.
+Defines the ASCII dancer used in Rhythm Dance mode: its animation states (idle, Perfect, Nice, OK, Miss) and how frames advance, so each judgment gets visible feedback.
 ## Requirements
 ### Requirement: Dance Character Animation States
 系统 SHALL 根据判定结果显示不同的 ASCII 舞蹈动画。

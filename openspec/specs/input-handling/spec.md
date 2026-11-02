@@ -1,7 +1,7 @@
 # input-handling Specification
 
 ## Purpose
-TBD - created by archiving change add-classic-game-mode. Update Purpose after archive.
+Defines how keyboard input is captured, buffered and validated, and how Enter, Space and other keys behave in each game mode.
 ## Requirements
 ### Requirement: Keyboard Event Listening
 系统 SHALL 实时监听键盘事件，无阻塞地捕获用户输入。

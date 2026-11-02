@@ -1,7 +1,7 @@
 # game-core Specification
 
 ## Purpose
-TBD - created by archiving change add-classic-game-mode. Update Purpose after archive.
+Defines the core word-elimination gameplay: loading dictionaries, generating words by difficulty ratio, matching and eliminating input, game state transitions and the pause menu.
 ## Requirements
 ### Requirement: Word Pool Management
 游戏 SHALL 支持加载多个难度级别的单词词库,并根据配置的比例从不同难度池中随机选择单词。

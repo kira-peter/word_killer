@@ -1,7 +1,7 @@
 # online-room Specification
 
 ## Purpose
-定义联机房间的创建、加入、大厅和断线处理：玩家通过房主 IP 和 4 位房间号进入同一房间，由房主选择玩法并开始对局。
+Defines online rooms: creating one, joining by host IP and 4-digit room number, the lobby where the host picks a mode and starts, and handling disconnects.
 
 ## Requirements
 

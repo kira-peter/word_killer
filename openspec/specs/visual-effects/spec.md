@@ -1,7 +1,7 @@
 # visual-effects Specification
 
 ## Purpose
-TBD - created by archiving change add-rhythm-dance-mode. Update Purpose after archive.
+Defines the visual presentation of Rhythm Dance mode: the rhythm bar, judgment effects, word display, dancer placement and the statistics panel.
 ## Requirements
 ### Requirement: Rhythm Bar Rendering
 系统 SHALL 渲染节奏条、指针和黄金分割点标记。

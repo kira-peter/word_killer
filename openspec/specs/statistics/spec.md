@@ -1,7 +1,7 @@
 # statistics Specification
 
 ## Purpose
-TBD - created by archiving change add-classic-game-mode. Update Purpose after archive.
+Defines the gameplay statistics that are collected and derived: keystrokes, words, letters, elapsed time, speed, accuracy and Rhythm Dance judgment counts.
 ## Requirements
 ### Requirement: Keystroke Counting
 系统 SHALL 准确统计各类按键操作。

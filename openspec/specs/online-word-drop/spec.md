@@ -1,7 +1,7 @@
 # online-word-drop Specification
 
 ## Purpose
-定义单词掉落对战的规则：10 个单词依次掉落，由服务端裁决归属，最先提交正确单词的玩家得分，最后按总分排名。
+Defines the Word Drop battle: ten words fall one at a time, the server awards each to the first correct claim, scores equal word length and the highest total wins.
 
 ## Requirements
 

@@ -1,7 +1,7 @@
 # word-queue Specification
 
 ## Purpose
-TBD - created by archiving change improve-rhythm-dance-multi-word-display. Update Purpose after archive.
+Defines the Rhythm Dance word queue: how it is filled, how it advances when a word is completed, and how the current word is identified.
 ## Requirements
 ### Requirement: Word Queue Management
 系统 SHALL 维护一个固定大小的单词队列，用于节奏舞蹈模式的多单词显示。
