@@ -615,7 +615,7 @@ func (g *Game) TryEliminate() {
 				g.ConsecutiveSuccesses++
 
 				// 根据配置的每级单词数增加难度
-				if g.ConsecutiveSuccesses > 0 && g.ConsecutiveSuccesses%g.RhythmWordsPerLevel == 0 {
+				if g.RhythmWordsPerLevel > 0 && g.ConsecutiveSuccesses%g.RhythmWordsPerLevel == 0 {
 					g.DifficultyLevel++
 					// 减少时间限制，使用配置的步长和最小值
 					newLimit := g.RhythmInitialTimeLimit - float64(g.DifficultyLevel)*g.RhythmDifficultyStep

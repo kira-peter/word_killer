@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -144,5 +146,48 @@ func TestPlayerNameTruncation(t *testing.T) {
 	}
 	if cfg.OnlinePlayerName != "AVeryLongPla" {
 		t.Errorf("name = %q, want %q", cfg.OnlinePlayerName, "AVeryLongPla")
+	}
+}
+
+func TestApplyRhythmMasterDefaults(t *testing.T) {
+	defaults := DefaultConfig()
+
+	cfg := &Config{}
+	cfg.applyRhythmMasterDefaults()
+	if cfg.RhythmInitialTimeLimit != defaults.RhythmInitialTimeLimit ||
+		cfg.RhythmMinTimeLimit != defaults.RhythmMinTimeLimit ||
+		cfg.RhythmWordsPerLevel != defaults.RhythmWordsPerLevel {
+		t.Errorf("zero values not replaced: %+v", cfg)
+	}
+
+	// A zero step is valid: the time limit simply never shrinks
+	if cfg.RhythmDifficultyStep != 0 {
+		t.Errorf("zero step should be kept, got %v", cfg.RhythmDifficultyStep)
+	}
+
+	cfg = &Config{RhythmInitialTimeLimit: 1, RhythmMinTimeLimit: 3, RhythmDifficultyStep: -1, RhythmWordsPerLevel: -5}
+	cfg.applyRhythmMasterDefaults()
+	if cfg.RhythmMinTimeLimit != 1 || cfg.RhythmDifficultyStep != defaults.RhythmDifficultyStep || cfg.RhythmWordsPerLevel != defaults.RhythmWordsPerLevel {
+		t.Errorf("invalid values not fixed: %+v", cfg)
+	}
+
+	cfg = &Config{RhythmInitialTimeLimit: 4, RhythmMinTimeLimit: 0.5, RhythmDifficultyStep: 0.2, RhythmWordsPerLevel: 5}
+	cfg.applyRhythmMasterDefaults()
+	if cfg.RhythmInitialTimeLimit != 4 || cfg.RhythmMinTimeLimit != 0.5 || cfg.RhythmDifficultyStep != 0.2 || cfg.RhythmWordsPerLevel != 5 {
+		t.Errorf("valid values changed: %+v", cfg)
+	}
+}
+
+func TestLoadAppliesRhythmMasterDefaults(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"rhythm_initial_time_limit": 0}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RhythmInitialTimeLimit <= 0 || cfg.RhythmWordsPerLevel <= 0 {
+		t.Errorf("Load kept invalid rhythm settings: %+v", cfg)
 	}
 }

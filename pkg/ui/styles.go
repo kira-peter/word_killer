@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -1201,9 +1202,10 @@ func renderRhythmWordArea(words []WordInfo, highlightedIndices []int, input stri
 
 				// 添加进度条
 				barWidth := 16
-				progressPercent := wordTimeRemaining / wordTimeLimit
-				if progressPercent < 0 {
-					progressPercent = 0
+				// Clamp to [0, 1]; a zero limit would otherwise give NaN or Inf
+				progressPercent := 0.0
+				if wordTimeLimit > 0 {
+					progressPercent = math.Max(0, math.Min(1, wordTimeRemaining/wordTimeLimit))
 				}
 				filledWidth := int(float64(barWidth) * progressPercent)
 

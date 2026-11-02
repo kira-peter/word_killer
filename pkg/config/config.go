@@ -87,6 +87,27 @@ func DefaultConfig() *Config {
 	}
 }
 
+// applyRhythmMasterDefaults replaces missing or invalid Rhythm Master settings.
+// A zero time limit or words-per-level would otherwise crash the mode.
+func (c *Config) applyRhythmMasterDefaults() {
+	defaults := DefaultConfig()
+	if c.RhythmInitialTimeLimit <= 0 {
+		c.RhythmInitialTimeLimit = defaults.RhythmInitialTimeLimit
+	}
+	if c.RhythmMinTimeLimit <= 0 {
+		c.RhythmMinTimeLimit = defaults.RhythmMinTimeLimit
+	}
+	if c.RhythmMinTimeLimit > c.RhythmInitialTimeLimit {
+		c.RhythmMinTimeLimit = c.RhythmInitialTimeLimit
+	}
+	if c.RhythmDifficultyStep < 0 {
+		c.RhythmDifficultyStep = defaults.RhythmDifficultyStep
+	}
+	if c.RhythmWordsPerLevel <= 0 {
+		c.RhythmWordsPerLevel = defaults.RhythmWordsPerLevel
+	}
+}
+
 // applyOnlineDefaults fills unset online settings and truncates the player name
 func (c *Config) applyOnlineDefaults() {
 	if c.OnlinePort <= 0 {
@@ -144,6 +165,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	cfg.applyRhythmMasterDefaults()
 	cfg.applyOnlineDefaults()
 	return &cfg, nil
 }
