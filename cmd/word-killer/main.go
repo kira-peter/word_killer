@@ -29,7 +29,8 @@ type model struct {
 	welcomeAnimState *ui.WelcomeAnimationState // welcome screen animation state
 	// 极速模式专用
 	speedRunBestTime float64 // 最佳时间（秒），从文件加载
-	tickCount        int     // tick 计数器，用于控制游戏逻辑更新频率
+	online           *onlineState
+	tickCount        int // tick 计数器，用于控制游戏逻辑更新频率
 }
 
 func initialModel(cfg *config.Config, g *game.Game) model {
@@ -41,6 +42,7 @@ func initialModel(cfg *config.Config, g *game.Game) model {
 		showAbout:        false,
 		selectedMode:     0,
 		welcomeAnimState: &ui.WelcomeAnimationState{},
+		online:           &onlineState{},
 	}
 }
 
@@ -59,6 +61,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
+	case joinResultMsg:
+		m.handleJoinResult(msg)
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -68,12 +74,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Increment tick counter and animation frame (30 FPS)
 		m.tickCount++
 		m.animFrame++
+		m.pollOnline()
 
 		// Update game logic only every 3 ticks (~100ms, 10 updates/second)
 		// This keeps animation speeds the same while rendering at 30 FPS
 		if m.tickCount%3 == 0 {
 			// Update welcome animation if on welcome screen
-			if !m.ready && !m.showModeSelect && !m.showAbout {
+			if !m.ready && !m.showModeSelect && !m.showAbout && m.online.screen == onlineNone {
 				ui.UpdateWelcomeAnimation(m.welcomeAnimState)
 			}
 
@@ -104,6 +111,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Online screens
+	if m.online.screen != onlineNone {
+		return m.handleOnlineKey(msg)
+	}
+
 	// About screen
 	if !m.ready && m.showAbout {
 		switch msg.String() {
@@ -119,11 +131,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if !m.ready && !m.showModeSelect && !m.showAbout {
 		switch msg.String() {
 		case "up", "k":
-			// Move selection up (3 options now)
+			// Move selection up (Start, Online, About)
 			m.welcomeAnimState.SelectedOption = (m.welcomeAnimState.SelectedOption - 1 + 3) % 3
 			return m, nil
 		case "down", "j":
-			// Move selection down (3 options now)
+			// Move selection down (Start, Online, About)
 			m.welcomeAnimState.SelectedOption = (m.welcomeAnimState.SelectedOption + 1) % 3
 			return m, nil
 		case "enter":
@@ -133,11 +145,13 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.showModeSelect = true
 				m.selectedMode = 0
 			} else if m.welcomeAnimState.SelectedOption == 1 {
+				// Online selected
+				m.online.screen = onlineMenu
+				m.online.menuIndex = 0
+				m.online.notice = ""
+			} else {
 				// About selected
 				m.showAbout = true
-			} else {
-				// Quit selected
-				return m, tea.Quit
 			}
 			return m, nil
 		case "esc", "ctrl+c":
@@ -342,6 +356,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	// Online screens
+	if m.online.screen != onlineNone {
+		return m.onlineView()
+	}
+
 	// About screen
 	if !m.ready && m.showAbout {
 		return ui.RenderAbout()

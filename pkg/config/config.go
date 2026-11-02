@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/user"
+	"strings"
 )
 
 // Config game configuration
@@ -40,7 +42,19 @@ type Config struct {
 	RhythmDanceDuration      int     `json:"rhythm_dance_duration"`        // 节奏舞蹈模式时长（秒）
 	RhythmDanceInitialSpeed  float64 `json:"rhythm_dance_initial_speed"`   // 节奏舞蹈指针初始速度
 	RhythmDanceSpeedIncrement float64 `json:"rhythm_dance_speed_increment"` // 每完成一个单词的速度增量
+
+	// Online mode settings
+	OnlinePort         int    `json:"online_port"`          // 联机房间监听端口
+	OnlineDropDuration int    `json:"online_drop_duration"` // 单词掉落时长（秒）
+	OnlinePlayerName   string `json:"online_player_name"`   // 联机昵称
 }
+
+// Online mode defaults
+const (
+	DefaultOnlinePort         = 7788
+	DefaultOnlineDropDuration = 8
+	MaxPlayerNameLength       = 12
+)
 
 // DefaultConfig returns default configuration
 func DefaultConfig() *Config {
@@ -66,7 +80,49 @@ func DefaultConfig() *Config {
 		RhythmDanceDuration:       60,    // 默认60秒
 		RhythmDanceInitialSpeed:   0.05,  // 初始速度0.05
 		RhythmDanceSpeedIncrement: 0.005, // 每完成一个单词增加0.005
+		// Online mode defaults
+		OnlinePort:         DefaultOnlinePort,
+		OnlineDropDuration: DefaultOnlineDropDuration,
+		OnlinePlayerName:   defaultPlayerName(),
 	}
+}
+
+// applyOnlineDefaults fills unset online settings and truncates the player name
+func (c *Config) applyOnlineDefaults() {
+	if c.OnlinePort <= 0 {
+		c.OnlinePort = DefaultOnlinePort
+	}
+	if c.OnlineDropDuration <= 0 {
+		c.OnlineDropDuration = DefaultOnlineDropDuration
+	}
+	if strings.TrimSpace(c.OnlinePlayerName) == "" {
+		c.OnlinePlayerName = defaultPlayerName()
+	}
+	c.OnlinePlayerName = truncateName(strings.TrimSpace(c.OnlinePlayerName))
+}
+
+// defaultPlayerName returns the OS user name, or "Player" if unavailable
+func defaultPlayerName() string {
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		name := u.Username
+		// Windows returns DOMAIN\user
+		if i := strings.LastIndexAny(name, `\/`); i >= 0 {
+			name = name[i+1:]
+		}
+		if name != "" {
+			return truncateName(name)
+		}
+	}
+	return "Player"
+}
+
+// truncateName limits a player name to MaxPlayerNameLength characters
+func truncateName(name string) string {
+	runes := []rune(name)
+	if len(runes) > MaxPlayerNameLength {
+		return string(runes[:MaxPlayerNameLength])
+	}
+	return name
 }
 
 // Load loads configuration file
@@ -88,6 +144,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	cfg.applyOnlineDefaults()
 	return &cfg, nil
 }
 

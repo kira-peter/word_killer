@@ -128,7 +128,7 @@ type WordInfo struct {
 // WelcomeAnimationState tracks the welcome screen animation state
 type WelcomeAnimationState struct {
 	Frame              int
-	SelectedOption     int  // 0 for start, 1 for about
+	SelectedOption     int  // 0 for start, 1 for online, 2 for about
 	BulletActive       bool // whether a bullet is currently flying
 	BulletX            int  // bullet column position
 	BulletRow          int  // which line the bullet is on (relative to content box)
@@ -180,8 +180,8 @@ func renderWelcomeContent(selectedOption int, animFrame int, state *WelcomeAnima
 	// Line 1: Empty
 	lines = append(lines, addBulletToLine(strings.Repeat(" ", contentWidth-8), 1, state))
 
-	// Lines 2-3: Menu options (Start, About)
-	options := []string{"Start", "About"}
+	// Lines 2-4: Menu options (Start, Online, About)
+	options := []string{"Start", "Online", "About"}
 	selectedStyle := lipgloss.NewStyle().Foreground(getRandomMenuColor(animFrame)).Bold(true)
 
 	for i, opt := range options {
@@ -208,8 +208,8 @@ func renderWelcomeContent(selectedOption int, animFrame int, state *WelcomeAnima
 		lines = append(lines, addBulletToLine("  "+alignedText, lineIndex, state))
 	}
 
-	// Lines 4-9: Empty (middle spacing)
-	for i := 4; i < 10; i++ {
+	// Lines 5-9: Empty (middle spacing)
+	for i := 5; i < 10; i++ {
 		lines = append(lines, addBulletToLine(strings.Repeat(" ", contentWidth-8), i, state))
 	}
 

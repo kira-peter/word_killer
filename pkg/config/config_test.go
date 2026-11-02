@@ -110,3 +110,39 @@ func abs(x float64) float64 {
 	}
 	return x
 }
+
+func TestApplyOnlineDefaults(t *testing.T) {
+	cfg := &Config{}
+	cfg.applyOnlineDefaults()
+
+	if cfg.OnlinePort != DefaultOnlinePort {
+		t.Errorf("OnlinePort = %d, want %d", cfg.OnlinePort, DefaultOnlinePort)
+	}
+	if cfg.OnlineDropDuration != DefaultOnlineDropDuration {
+		t.Errorf("OnlineDropDuration = %d, want %d", cfg.OnlineDropDuration, DefaultOnlineDropDuration)
+	}
+	if cfg.OnlinePlayerName == "" {
+		t.Error("OnlinePlayerName should not be empty")
+	}
+}
+
+func TestApplyOnlineDefaultsKeepsCustomValues(t *testing.T) {
+	cfg := &Config{OnlinePort: 9000, OnlineDropDuration: 5, OnlinePlayerName: "Alice"}
+	cfg.applyOnlineDefaults()
+
+	if cfg.OnlinePort != 9000 || cfg.OnlineDropDuration != 5 || cfg.OnlinePlayerName != "Alice" {
+		t.Errorf("custom values changed: %+v", cfg)
+	}
+}
+
+func TestPlayerNameTruncation(t *testing.T) {
+	cfg := &Config{OnlinePlayerName: "AVeryLongPlayerName"}
+	cfg.applyOnlineDefaults()
+
+	if got := []rune(cfg.OnlinePlayerName); len(got) != MaxPlayerNameLength {
+		t.Errorf("name length = %d, want %d", len(got), MaxPlayerNameLength)
+	}
+	if cfg.OnlinePlayerName != "AVeryLongPla" {
+		t.Errorf("name = %q, want %q", cfg.OnlinePlayerName, "AVeryLongPla")
+	}
+}

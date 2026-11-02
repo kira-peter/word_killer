@@ -394,6 +394,19 @@ func (g *Game) generateWordsFromMultiPools(count int) []Word {
 	return words
 }
 
+// DrawWords returns count distinct words from the difficulty pools.
+// The online server calls it from its own goroutine, which is safe because
+// the game itself is idle while a room is open.
+func (g *Game) DrawWords(count int) []string {
+	g.usedWords = make(map[string]bool)
+	words := g.generateWordsFromMultiPools(count)
+	texts := make([]string, len(words))
+	for i, w := range words {
+		texts[i] = w.Text
+	}
+	return texts
+}
+
 // selectWordsFromPool selects random words from a pool without repetition
 func (g *Game) selectWordsFromPool(pool []string, count int) []Word {
 	if count <= 0 || len(pool) == 0 {
