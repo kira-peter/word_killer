@@ -170,12 +170,8 @@ func renderWelcomeContent(selectedOption int, animFrame int, state *WelcomeAnima
 	const totalLines = 12 // Total lines in the content box
 	var lines []string
 
-	// Line 0: Version (top-left)
-	topline := lipgloss.NewStyle().Foreground(lipgloss.Color("117")).Render("V1.0.0")
-	versionLine := lipgloss.NewStyle().Width(contentWidth-8).
-		Align(lipgloss.Left, lipgloss.Top).
-		Render(topline)
-	lines = append(lines, addBulletToLine(versionLine, 0, state))
+	// Line 0: Empty
+	lines = append(lines, addBulletToLine(strings.Repeat(" ", contentWidth-8), 0, state))
 
 	// Line 1: Empty
 	lines = append(lines, addBulletToLine(strings.Repeat(" ", contentWidth-8), 1, state))
@@ -1282,6 +1278,9 @@ func RenderAbout() string {
 func renderAboutContent() string {
 	var lines []string
 
+	lines = append(lines, "")
+	lines = append(lines, "  "+titleStyle.Render("Version: ")+statValueStyle.Render("V"+Version))
+	lines = append(lines, "  "+titleStyle.Render("Built:   ")+statValueStyle.Render(buildTimeLabel()))
 	lines = append(lines, "")
 	lines = append(lines, titleStyle.Render("  Game Modes:"))
 	lines = append(lines, "")

@@ -14,7 +14,12 @@ GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
 
 # Build flags
-LDFLAGS=-ldflags "-s -w"
+# BUILD_TIME is optional; when empty the about page shows the executable's mtime,
+# which is the build time anyway. Pass one explicitly when needed:
+#   make build BUILD_TIME=2026-11-02T17:20
+BUILD_TIME ?=
+VERSION_PKG=github.com/word-killer/word-killer/pkg/ui
+LDFLAGS=-ldflags "-s -w $(if $(BUILD_TIME),-X $(VERSION_PKG).BuildTime=$(BUILD_TIME),)"
 
 # OS-specific commands
 ifeq ($(OS),Windows_NT)
