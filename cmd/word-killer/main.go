@@ -355,7 +355,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) View() string {
+func (m model) renderScreen() string {
 	// Online screens
 	if m.online.screen != onlineNone {
 		return m.onlineView()
@@ -719,4 +719,9 @@ func saveSpeedRunBestTime(newTime float64) error {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(&record)
+}
+
+// View renders the current screen centered in the terminal
+func (m model) View() string {
+	return ui.CenterHorizontally(m.renderScreen(), m.width)
 }
