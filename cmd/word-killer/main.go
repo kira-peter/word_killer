@@ -719,7 +719,12 @@ func saveSpeedRunBestTime(newTime float64) error {
 	return encoder.Encode(&record)
 }
 
-// View renders the current screen centered in the terminal
+// View renders the current screen centered in the terminal, or asks for a
+// bigger window when the screen would not fit. The game keeps running
+// underneath, so it picks up again as soon as the window is enlarged.
 func (m model) View() string {
+	if ui.TerminalTooSmall(m.width, m.height) {
+		return ui.RenderTooSmall(m.width, m.height)
+	}
 	return ui.CenterHorizontally(m.renderScreen(), m.width)
 }

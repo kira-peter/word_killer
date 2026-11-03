@@ -29,7 +29,7 @@ ifeq ($(OS),Windows_NT)
     MKDIR_BUILD = if not exist $(BUILD_DIR) mkdir $(BUILD_DIR)
     BINARY_EXT = .exe
     RUN_PREFIX =
-    COPY_ASSETS = xcopy /E /I /Y /Q data $(BUILD_DIR)\data >nul && copy /Y config.json $(BUILD_DIR) >nul
+    COPY_ASSETS = xcopy /E /I /Y /Q data $(BUILD_DIR)\data >nul && copy /Y config.json $(BUILD_DIR) >nul && copy /Y start.bat $(BUILD_DIR) >nul
     # Usage: $(call SETENV,GOOS,linux) $(call SETENV,GOARCH,amd64) go build ...
     SETENV = set $(1)=$(2)&&
 else
