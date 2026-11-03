@@ -1,7 +1,7 @@
 # Implementation Tasks
 
 ## 0. 前置
-- [ ] 0.1 手动验证并归档 `add-lan-room-discovery`，本变更的规范增量建立在它归档后的规范之上
+- [x] 0.1 手动验证并归档 `add-lan-room-discovery`，本变更的规范增量建立在它归档后的规范之上
 
 ## 1. 协议与设置
 - [x] 1.1 协议版本升到 3；新增 kick、kicked、set_option、sentence、pool_spawn、pool_claimed 消息
