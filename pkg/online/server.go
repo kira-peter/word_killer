@@ -32,12 +32,13 @@ type ServerConfig struct {
 	// Host is the listen address; empty means all interfaces
 	Host           string
 	Port           int
-	DropDuration   time.Duration
-	WordCount      int
+	DropDuration   time.Duration // how long a Word Drop word takes to fall
 	StartCountdown time.Duration
-	NextWordDelay  time.Duration
+	NextWordDelay  time.Duration // pause after a word or sentence is taken
 	// WordSource returns n distinct words for a new game
 	WordSource func(n int) []string
+	// SentenceSource returns n distinct sentences for a new game
+	SentenceSource func(n int) []string
 }
 
 type serverPhase int
@@ -45,8 +46,7 @@ type serverPhase int
 const (
 	phaseLobby serverPhase = iota
 	phaseCountdown
-	phaseFalling
-	phaseBetween
+	phasePlaying
 	phaseResult
 )
 
@@ -64,6 +64,9 @@ type serverEvent struct {
 	conn net.Conn
 	msg  Message
 	gone bool
+	// timeLimit ends the game as the time limit would; tests use it to avoid
+	// waiting out the real limit
+	timeLimit bool
 }
 
 // roomStatus is what discovery replies report; run publishes it, and the
@@ -86,14 +89,19 @@ type Server struct {
 	done     chan struct{}
 	once     sync.Once
 
-	players []*serverPlayer
-	nextID  int
-	mode    string
-	phase   serverPhase
-	words   []string
-	current int
-	timer   *time.Timer
-	timerC  <-chan time.Time
+	players  []*serverPlayer
+	nextID   int
+	mode     string
+	settings Settings
+	phase    serverPhase
+	game     gameMode
+
+	// timer drives the countdown and then the mode; limit ends the game
+	// when the overall time limit is reached
+	timer  *time.Timer
+	timerC <-chan time.Time
+	limit  *time.Timer
+	limitC <-chan time.Time
 
 	statusMu sync.Mutex
 	status   roomStatus
@@ -116,6 +124,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		done:     make(chan struct{}),
 		nextID:   hostPlayerID,
 		mode:     ModeWordDrop,
+		settings: DefaultSettings(ModeWordDrop),
 	}
 
 	go s.acceptLoop()
@@ -217,6 +226,10 @@ func (s *Server) run() {
 		case <-s.timerC:
 			s.timerC = nil
 			s.handleTimer()
+		case <-s.limitC:
+			s.limitC = nil
+			s.finishGame()
+			s.publishStatus()
 		case <-s.closeCh:
 			s.shutdown()
 			return
@@ -279,7 +292,7 @@ func (s *Server) publishStatus() {
 }
 
 func (s *Server) shutdown() {
-	s.stopTimer()
+	s.stopTimers()
 	s.listener.Close()
 	s.udp.Close()
 	for _, p := range s.players {
@@ -293,6 +306,11 @@ func (s *Server) shutdown() {
 func (s *Server) handleEvent(ev serverEvent) {
 	// Every event may change the players or phase that discovery reports
 	defer s.publishStatus()
+
+	if ev.timeLimit {
+		s.finishGame()
+		return
+	}
 
 	player := s.playerByConn(ev.conn)
 
@@ -309,10 +327,13 @@ func (s *Server) handleEvent(ev serverEvent) {
 	}
 
 	switch ev.msg.Type {
-	case TypeSelectMode:
-		if player.id == hostPlayerID && s.phase == phaseLobby && isKnownMode(ev.msg.Mode) {
-			s.mode = ev.msg.Mode
-			s.broadcastLobby()
+	case TypeSetOption:
+		if player.id == hostPlayerID && s.phase == phaseLobby {
+			s.setOption(ev.msg.Option, ev.msg.Value, ev.msg.Mode)
+		}
+	case TypeKick:
+		if player.id == hostPlayerID && s.phase == phaseLobby {
+			s.kick(ev.msg.PlayerID)
 		}
 	case TypeRename:
 		if s.phase == phaseLobby {
@@ -324,10 +345,56 @@ func (s *Server) handleEvent(ev serverEvent) {
 			s.startGame()
 		}
 	case TypeClaim:
-		s.handleClaim(player, ev.msg)
+		if s.phase == phasePlaying {
+			s.game.onClaim(player, ev.msg)
+		}
+	case TypeTyping:
+		// Relay what a player is typing so everyone can watch the race
+		if s.phase == phasePlaying {
+			s.broadcastExcept(player, Message{Type: TypeTyping, PlayerID: player.id, Word: limitTyping(ev.msg.Word)})
+		}
 	case TypeBackToLobby:
 		if player.id == hostPlayerID && s.phase == phaseResult {
 			s.backToLobby()
+		}
+	}
+}
+
+// setOption changes the mode or one of its settings. Values outside the
+// preset steps are ignored; a new mode starts from its defaults.
+func (s *Server) setOption(key string, value int, mode string) {
+	if key == OptionMode {
+		if !isKnownMode(mode) || mode == s.mode {
+			return
+		}
+		s.mode = mode
+		s.settings = DefaultSettings(mode)
+		s.broadcastLobby()
+		return
+	}
+	settings, ok := s.settings.Apply(s.mode, key, value)
+	if !ok {
+		return
+	}
+	s.settings = settings
+	s.broadcastLobby()
+}
+
+// kick tells a player they were kicked, drops their connection and removes
+// them. Their read loop then reports a disconnect for a connection that no
+// longer belongs to anyone, which handleEvent ignores.
+func (s *Server) kick(id int) {
+	if id == hostPlayerID {
+		return
+	}
+	for _, p := range s.players {
+		if p.id == id {
+			s.send(p, Message{Type: TypeKicked})
+			p.connected = false
+			p.conn.Close()
+			s.removeDisconnected()
+			s.broadcastLobby()
+			return
 		}
 	}
 }
@@ -378,7 +445,7 @@ func (s *Server) handleDisconnect(player *serverPlayer) {
 	case phaseLobby:
 		s.removeDisconnected()
 		s.broadcastLobby()
-	case phaseCountdown, phaseFalling, phaseBetween:
+	case phaseCountdown, phasePlaying:
 		// Keep the player so their score still appears in the ranking
 		if s.connectedCount() < MinPlayers {
 			s.finishGame()
@@ -386,17 +453,46 @@ func (s *Server) handleDisconnect(player *serverPlayer) {
 	}
 }
 
+// newGame builds the selected mode with fresh words or sentences, or
+// returns nil when there is nothing to play with
+func (s *Server) newGame() gameMode {
+	switch s.mode {
+	case ModeSentenceRace:
+		sentences := s.cfg.SentenceSource(s.settings.Count)
+		if len(sentences) == 0 {
+			return nil
+		}
+		return newSentenceRace(s, sentences, s.cfg.NextWordDelay)
+	case ModeWordPool:
+		if len(s.cfg.WordSource(1)) == 0 {
+			return nil
+		}
+		return newWordPool(s, s.cfg.WordSource, s.settings.SpawnRate, s.settings.AllowSteal)
+	default:
+		words := s.cfg.WordSource(s.settings.Count)
+		if len(words) == 0 {
+			return nil
+		}
+		return newWordDrop(s, words, s.cfg.DropDuration, s.cfg.NextWordDelay)
+	}
+}
+
 func (s *Server) startGame() {
 	if len(s.players) < MinPlayers {
 		return
 	}
-	words := s.cfg.WordSource(s.cfg.WordCount)
-	if len(words) == 0 {
+	game := s.newGame()
+	if game == nil {
+		// Tell the host instead of silently staying in the lobby
+		for _, p := range s.players {
+			if p.id == hostPlayerID {
+				s.send(p, Message{Type: TypeStartFailed, Reason: "No " + itemNoun(s.mode) + " available"})
+			}
+		}
 		return
 	}
 
-	s.words = words
-	s.current = 0
+	s.game = game
 	for _, p := range s.players {
 		p.score = 0
 		p.words = 0
@@ -406,10 +502,11 @@ func (s *Server) startGame() {
 	s.broadcast(Message{
 		Type:        TypeGameStart,
 		Mode:        s.mode,
-		TotalWords:  len(words),
+		Settings:    &s.settings,
+		TotalWords:  game.totalItems(),
 		CountdownMs: int(s.cfg.StartCountdown.Milliseconds()),
 	})
-	s.setTimer(s.cfg.StartCountdown)
+	s.setModeTimer(s.cfg.StartCountdown)
 }
 
 func (s *Server) handleTimer() {
@@ -417,60 +514,29 @@ func (s *Server) handleTimer() {
 
 	switch s.phase {
 	case phaseCountdown:
-		s.spawnWord()
-	case phaseFalling:
-		s.broadcast(Message{Type: TypeWordExpired, Index: s.current})
-		s.endWord()
-	case phaseBetween:
-		s.current++
-		if s.current >= len(s.words) {
-			s.finishGame()
-		} else {
-			s.spawnWord()
-		}
+		// The time limit runs from the first word, not from the countdown
+		s.phase = phasePlaying
+		s.limit = time.NewTimer(time.Duration(s.settings.TimeLimit) * time.Second)
+		s.limitC = s.limit.C
+		s.game.begin()
+	case phasePlaying:
+		s.game.onTimer()
 	}
 }
 
-func (s *Server) spawnWord() {
-	s.phase = phaseFalling
-	s.broadcast(Message{
-		Type:   TypeWordSpawn,
-		Index:  s.current,
-		Word:   s.words[s.current],
-		FallMs: int(s.cfg.DropDuration.Milliseconds()),
-	})
-	s.setTimer(s.cfg.DropDuration)
-}
-
-// endWord starts the pause before the next word
-func (s *Server) endWord() {
-	s.phase = phaseBetween
-	s.setTimer(s.cfg.NextWordDelay)
-}
-
-// handleClaim awards the current word to the first valid claim to arrive.
-// Later or stale claims fail the phase/index check and are ignored.
-func (s *Server) handleClaim(player *serverPlayer, msg Message) {
-	if s.phase != phaseFalling || msg.Index != s.current || msg.Word != s.words[s.current] {
-		return
-	}
-
-	points := len([]rune(msg.Word))
-	player.score += points
-	player.words++
-
-	s.broadcast(Message{
-		Type:     TypeWordClaimed,
-		Index:    s.current,
-		PlayerID: player.id,
-		Points:   points,
-	})
-	s.endWord()
+// award adds a mode's points; negative values take them back after a steal
+func (s *Server) award(p *serverPlayer, points, items int) {
+	p.score += points
+	p.words += items
 }
 
 func (s *Server) finishGame() {
-	s.stopTimer()
+	if s.phase != phaseCountdown && s.phase != phasePlaying {
+		return
+	}
+	s.stopTimers()
 	s.phase = phaseResult
+	s.game = nil
 
 	ranking := make([]RankEntry, 0, len(s.players))
 	for _, p := range s.players {
@@ -511,7 +577,7 @@ func (s *Server) broadcastLobby() {
 	for _, p := range s.players {
 		players = append(players, PlayerInfo{ID: p.id, Name: p.name, IsHost: p.id == hostPlayerID})
 	}
-	s.broadcast(Message{Type: TypeLobby, Players: players, Mode: s.mode})
+	s.broadcast(Message{Type: TypeLobby, Players: players, Mode: s.mode, Settings: &s.settings})
 }
 
 func (s *Server) broadcast(msg Message) {
@@ -520,6 +586,28 @@ func (s *Server) broadcast(msg Message) {
 			s.send(p, msg)
 		}
 	}
+}
+
+// broadcastExcept sends to everyone but one player, who already knows
+func (s *Server) broadcastExcept(skip *serverPlayer, msg Message) {
+	for _, p := range s.players {
+		if p.connected && p != skip {
+			s.send(p, msg)
+		}
+	}
+}
+
+// maxTypingLength bounds a relayed input; the longest sentence is far shorter
+const maxTypingLength = 200
+
+// limitTyping keeps relayed input printable and bounded, since it is passed
+// on to every other player's terminal
+func limitTyping(text string) string {
+	text = printableASCII(text)
+	if len(text) > maxTypingLength {
+		text = text[:maxTypingLength]
+	}
+	return text
 }
 
 // send writes to a player; a failed write closes the connection,
@@ -531,17 +619,24 @@ func (s *Server) send(p *serverPlayer, msg Message) {
 	}
 }
 
-func (s *Server) setTimer(d time.Duration) {
-	s.stopTimer()
+// setModeTimer (re)arms the single timer shared by the countdown and the mode
+func (s *Server) setModeTimer(d time.Duration) {
+	if s.timer != nil {
+		s.timer.Stop()
+	}
 	s.timer = time.NewTimer(d)
 	s.timerC = s.timer.C
 }
 
-func (s *Server) stopTimer() {
+func (s *Server) stopTimers() {
 	if s.timer != nil {
 		s.timer.Stop()
 	}
+	if s.limit != nil {
+		s.limit.Stop()
+	}
 	s.timerC = nil
+	s.limitC = nil
 }
 
 func (s *Server) playerByConn(conn net.Conn) *serverPlayer {
@@ -561,15 +656,6 @@ func (s *Server) connectedCount() int {
 		}
 	}
 	return count
-}
-
-func isKnownMode(mode string) bool {
-	for _, m := range Modes {
-		if m == mode {
-			return true
-		}
-	}
-	return false
 }
 
 // sanitizeName strips control characters so a remote name cannot inject

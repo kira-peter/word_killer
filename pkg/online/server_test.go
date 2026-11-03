@@ -10,7 +10,10 @@ import (
 	"time"
 )
 
-var testWords = []string{"alpha", "go", "keyboard"}
+// testWords has as many words as the smallest Word Drop count
+var testWords = []string{"alpha", "go", "keyboard", "cat", "river"}
+
+var testSentences = []string{"Go fast.", "Type it, now!", "A b c."}
 
 func startTestServer(t *testing.T, drop time.Duration) *Server {
 	t.Helper()
@@ -18,10 +21,10 @@ func startTestServer(t *testing.T, drop time.Duration) *Server {
 		Host:           "127.0.0.1",
 		Port:           0,
 		DropDuration:   drop,
-		WordCount:      len(testWords),
 		StartCountdown: 10 * time.Millisecond,
 		NextWordDelay:  10 * time.Millisecond,
-		WordSource:     func(n int) []string { return testWords[:n] },
+		WordSource:     func(n int) []string { return testWords[:min(n, len(testWords))] },
+		SentenceSource: func(n int) []string { return testSentences[:min(n, len(testSentences))] },
 	})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
@@ -76,12 +79,40 @@ func waitForLobbySize(t *testing.T, c *Client, size int) {
 	t.Fatalf("lobby never reached %d players", size)
 }
 
-func startTwoPlayerGame(t *testing.T, s *Server) (*Client, *Client) {
+// joinTwo joins a host and a guest and waits until both see the full lobby
+func joinTwo(t *testing.T, s *Server) (*Client, *Client) {
 	t.Helper()
 	host := joinTest(t, s, "Host")
 	guest := joinTest(t, s, "Guest")
 	waitForLobbySize(t, host, 2)
 	waitForLobbySize(t, guest, 2)
+	return host, guest
+}
+
+// setOption sends one lobby setting and waits until the lobby shows it
+func setOption(t *testing.T, host *Client, key string, value int, mode string) Message {
+	t.Helper()
+	host.Send(Message{Type: TypeSetOption, Option: key, Value: value, Mode: mode})
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		lobby, _ := waitFor(t, host, TypeLobby)
+		if key == OptionMode && lobby.Mode == mode {
+			return lobby
+		}
+		if key != OptionMode && lobby.Settings != nil && lobby.Settings.Get(key) == value {
+			return lobby
+		}
+	}
+	t.Fatalf("setting %s=%d/%s never applied", key, value, mode)
+	return Message{}
+}
+
+// startTwoPlayerGame starts Word Drop with the smallest word count, which
+// uses every test word
+func startTwoPlayerGame(t *testing.T, s *Server) (*Client, *Client) {
+	t.Helper()
+	host, guest := joinTwo(t, s)
+	setOption(t, host, OptionCount, len(testWords), "")
 	if err := host.Send(Message{Type: TypeStart}); err != nil {
 		t.Fatalf("Send start: %v", err)
 	}
@@ -245,9 +276,12 @@ func TestFullGame(t *testing.T) {
 	host.Send(Message{Type: TypeClaim, Index: second.Index, Word: second.Word})
 	waitFor(t, guest, TypeWordClaimed)
 
-	expired, _ := waitFor(t, guest, TypeWordExpired)
-	if expired.Index != 2 {
-		t.Errorf("expired index = %d, want 2", expired.Index)
+	// The remaining words fall unclaimed
+	for want := 2; want < len(testWords); want++ {
+		expired, _ := waitFor(t, guest, TypeWordExpired)
+		if expired.Index != want {
+			t.Errorf("expired index = %d, want %d", expired.Index, want)
+		}
 	}
 
 	over, _ := waitFor(t, host, TypeGameOver)

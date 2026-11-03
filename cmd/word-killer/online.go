@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	onlineWordCount      = 10
 	onlineStartCountdown = 3 * time.Second
 	onlineNextWordDelay  = 1 * time.Second
 	onlineLoopbackHost   = "127.0.0.1"
@@ -26,14 +25,15 @@ type onlineScreen int
 
 const (
 	onlineNone onlineScreen = iota
-	onlineMenu // Create Room plus the rooms found on the LAN
-	onlineRoom // lobby, battle or result, depending on battle.Phase
+	onlineMenu              // Create Room plus the rooms found on the LAN
+	onlineRoom              // lobby, battle or result, depending on battle.Phase
 )
 
 // onlineState holds everything the online screens need
 type onlineState struct {
 	screen     onlineScreen
-	notice     string // shown on the current screen until the next action
+	notice     string    // shown on the current screen until the next action
+	noticeAt   time.Time // when the menu notice appeared; it fades after menuNoticeTTL
 	connecting bool
 	address    string // host:port shown in the lobby
 
@@ -47,9 +47,26 @@ type onlineState struct {
 	editingName bool // the local player is renaming in the lobby
 	nameInput   string
 
+	// Host-only lobby controls: the highlighted menu row, the setting wheel
+	// being adjusted, and the kick picker
+	lobbyIndex int
+	wheel      *lobbyWheel
+	kickIDs    []int // nil while the picker is closed
+	kickIndex  int
+
 	server *online.Server // only set on the host
 	client *online.Client
 	battle *online.Battle
+}
+
+// lobbyWheel is a setting being adjusted. The value only changes locally
+// until the host confirms; Esc throws it away.
+type lobbyWheel struct {
+	key    string   // online.OptionMode or a setting key
+	label  string   //
+	values []int    // setting steps; for the mode wheel, indexes into online.Modes
+	steps  []string // display text for each value
+	index  int
 }
 
 // joinResultMsg reports the outcome of an asynchronous join
@@ -58,16 +75,25 @@ type joinResultMsg struct {
 	err    error
 }
 
+// menuNoticeTTL is how long a notice stays on the online menu
+const menuNoticeTTL = 3 * time.Second
+
+// setNotice shows a notice and starts its timer
+func (o *onlineState) setNotice(notice string) {
+	o.notice = notice
+	o.noticeAt = time.Now()
+}
+
 // openMenu shows the online menu and starts looking for rooms
 func (o *onlineState) openMenu(port int, notice string) {
 	o.screen = onlineMenu
-	o.notice = notice
+	o.setNotice(notice)
 	o.selectedRoom = ""
 	o.rooms = nil
 	if o.browser == nil {
 		browser, err := online.NewBrowser(port)
 		if err != nil {
-			o.notice = "Cannot search for rooms"
+			o.setNotice("Cannot search for rooms")
 			return
 		}
 		o.browser = browser
@@ -98,7 +124,16 @@ func (o *onlineState) enterRoom(client *online.Client, address string) {
 	o.address = address
 	o.screen = onlineRoom
 	o.notice = ""
+	o.resetLobbyControls()
+}
+
+// resetLobbyControls closes any open lobby overlay and returns to the top row
+func (o *onlineState) resetLobbyControls() {
 	o.editingName = false
+	o.lobbyIndex = 0
+	o.wheel = nil
+	o.kickIDs = nil
+	o.kickIndex = 0
 }
 
 // leaveRoom releases the connection and server, then returns to the online menu
@@ -106,7 +141,7 @@ func (m model) leaveRoom(notice string) {
 	o := m.online
 	o.closeConnections()
 	o.battle = nil
-	o.editingName = false
+	o.resetLobbyControls()
 	o.openMenu(m.cfg.OnlinePort, notice)
 }
 
@@ -150,13 +185,13 @@ func (m model) createRoom() {
 	server, err := online.NewServer(online.ServerConfig{
 		Port:           m.cfg.OnlinePort,
 		DropDuration:   time.Duration(m.cfg.OnlineDropDuration) * time.Second,
-		WordCount:      onlineWordCount,
 		StartCountdown: onlineStartCountdown,
 		NextWordDelay:  onlineNextWordDelay,
 		WordSource:     m.game.DrawWords,
+		SentenceSource: m.game.DrawSentences,
 	})
 	if err != nil {
-		m.online.notice = "Cannot open room on port " + strconv.Itoa(m.cfg.OnlinePort)
+		m.online.setNotice("Cannot open room on port " + strconv.Itoa(m.cfg.OnlinePort))
 		return
 	}
 
@@ -164,7 +199,7 @@ func (m model) createRoom() {
 	client, err := online.Connect(loopback, m.cfg.OnlinePlayerName)
 	if err != nil {
 		server.Close()
-		m.online.notice = "Cannot open room on port " + strconv.Itoa(m.cfg.OnlinePort)
+		m.online.setNotice("Cannot open room on port " + strconv.Itoa(m.cfg.OnlinePort))
 		return
 	}
 
@@ -192,9 +227,9 @@ func (m model) handleJoinResult(msg joinResultMsg) {
 	if msg.err != nil {
 		var rejected *online.RejectedError
 		if errors.As(msg.err, &rejected) {
-			m.online.notice = rejected.Error()
+			m.online.setNotice(rejected.Error())
 		} else {
-			m.online.notice = "Cannot connect to host"
+			m.online.setNotice("Cannot connect to host")
 		}
 		return
 	}
@@ -206,9 +241,16 @@ func (m model) pollOnline() {
 	o := m.online
 	if o.screen == onlineMenu {
 		o.refreshRooms()
+		if o.notice != "" && time.Since(o.noticeAt) >= menuNoticeTTL {
+			o.notice = ""
+		}
 	}
 	if o.client == nil {
 		return
+	}
+	// Share the local input with the other players, at most once per tick
+	if msg, ok := o.battle.TypingUpdate(); ok {
+		o.client.Send(msg)
 	}
 	now := time.Now()
 	for _, msg := range o.client.Poll() {
@@ -219,12 +261,18 @@ func (m model) pollOnline() {
 		case online.TypeDisconnected:
 			m.leaveRoom("Connection lost")
 			return
+		case online.TypeKicked:
+			m.leaveRoom("You were kicked")
+			return
+		case online.TypeStartFailed:
+			o.notice = msg.Reason
 		default:
 			o.battle.Apply(msg, now)
 			// The host may start the game while someone is still renaming
 			if o.battle.Phase != online.BattleLobby {
-				o.editingName = false
+				o.resetLobbyControls()
 			}
+			o.keepLobbyControlsValid()
 		}
 	}
 }
@@ -268,9 +316,9 @@ func (m model) handleOnlineMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		room := o.rooms[index-1]
 		switch {
 		case room.InGame:
-			o.notice = "Game in progress"
+			o.setNotice("Game in progress")
 		case room.Full():
-			o.notice = "Room is full"
+			o.setNotice("Room is full")
 		default:
 			o.connecting = true
 			o.joiningRoom = room
@@ -299,7 +347,8 @@ func (m model) handleRoomKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleNameEditKey(msg)
 	}
 
-	if key == "esc" {
+	// Esc first closes an open wheel or kick picker; only then does it leave
+	if key == "esc" && o.wheel == nil && o.kickIDs == nil {
 		m.leaveRoom("")
 		return m, nil
 	}
@@ -311,21 +360,8 @@ func (m model) handleRoomKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			o.nameInput = o.battle.PlayerName(o.battle.MyID)
 			return m, nil
 		}
-		if !o.battle.IsHost() {
-			return m, nil
-		}
-		switch key {
-		case "up", "k":
-			o.client.Send(online.Message{Type: online.TypeSelectMode, Mode: stepMode(o.battle.Mode, -1)})
-		case "down", "j":
-			o.client.Send(online.Message{Type: online.TypeSelectMode, Mode: stepMode(o.battle.Mode, 1)})
-		case "enter":
-			if len(o.battle.Players) < online.MinPlayers {
-				o.notice = "Need at least 2 players"
-				return m, nil
-			}
-			o.notice = ""
-			o.client.Send(online.Message{Type: online.TypeStart})
+		if o.battle.IsHost() {
+			m.handleHostLobbyKey(key)
 		}
 
 	case online.BattleFalling:
@@ -337,14 +373,10 @@ func (m model) handleRoomKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "backspace":
 			o.battle.Backspace()
 		default:
-			// msg.Runes may hold several characters when typing fast
+			// msg.Runes may hold several characters when typing fast; a space
+			// arrives as KeySpace with Runes holding ' '
 			for _, r := range msg.Runes {
-				if r >= 'A' && r <= 'Z' {
-					r += 'a' - 'A'
-				}
-				if r >= 'a' && r <= 'z' {
-					o.battle.AddChar(r)
-				}
+				o.battle.AddChar(r)
 			}
 		}
 
@@ -354,6 +386,169 @@ func (m model) handleRoomKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// handleHostLobbyKey drives the host's lobby menu, setting wheel and kick picker
+func (m model) handleHostLobbyKey(key string) {
+	o := m.online
+	switch {
+	case o.wheel != nil:
+		m.handleWheelKey(key)
+	case o.kickIDs != nil:
+		m.handleKickKey(key)
+	default:
+		m.handleLobbyMenuKey(key)
+	}
+}
+
+func (m model) handleLobbyMenuKey(key string) {
+	o := m.online
+	items := len(ui.LobbyItems(o.battle))
+	switch key {
+	case "up", "k":
+		if o.lobbyIndex > 0 {
+			o.lobbyIndex--
+		}
+	case "down", "j":
+		if o.lobbyIndex < items-1 {
+			o.lobbyIndex++
+		}
+	case "K", "x":
+		o.openKickPicker()
+	case "enter":
+		o.notice = ""
+		if o.lobbyIndex == items-1 {
+			if len(o.battle.Players) < online.MinPlayers {
+				o.notice = "Need at least 2 players"
+				return
+			}
+			o.client.Send(online.Message{Type: online.TypeStart})
+			return
+		}
+		o.openWheel(o.lobbyIndex)
+	}
+}
+
+// openWheel starts adjusting menu row i: row 0 is the mode, then settings
+func (o *onlineState) openWheel(i int) {
+	if i == 0 {
+		w := &lobbyWheel{key: online.OptionMode, label: "Mode"}
+		for idx, mode := range online.Modes {
+			w.values = append(w.values, idx)
+			w.steps = append(w.steps, online.ModeName(mode))
+			if mode == o.battle.Mode {
+				w.index = idx
+			}
+		}
+		o.wheel = w
+		return
+	}
+
+	options := online.ModeOptions(o.battle.Mode)
+	if i-1 >= len(options) {
+		return
+	}
+	opt := options[i-1]
+	w := &lobbyWheel{key: opt.Key, label: opt.Label, values: opt.Values}
+	for _, v := range opt.Values {
+		w.steps = append(w.steps, opt.Format(v))
+	}
+	if idx := opt.Index(o.battle.Settings.Get(opt.Key)); idx >= 0 {
+		w.index = idx
+	}
+	o.wheel = w
+}
+
+func (m model) handleWheelKey(key string) {
+	o := m.online
+	w := o.wheel
+	switch key {
+	case "up", "k":
+		if w.index > 0 {
+			w.index--
+		}
+	case "down", "j":
+		if w.index < len(w.values)-1 {
+			w.index++
+		}
+	case "enter":
+		msg := online.Message{Type: online.TypeSetOption, Option: w.key, Value: w.values[w.index]}
+		if w.key == online.OptionMode {
+			msg.Mode = online.Modes[w.values[w.index]]
+		}
+		o.client.Send(msg)
+		o.wheel = nil
+	case "esc":
+		o.wheel = nil
+	}
+}
+
+// openKickPicker offers every other player for kicking
+func (o *onlineState) openKickPicker() {
+	var ids []int
+	for _, p := range o.battle.Players {
+		if p.ID != o.battle.MyID {
+			ids = append(ids, p.ID)
+		}
+	}
+	if len(ids) == 0 {
+		o.notice = "No one to kick"
+		return
+	}
+	o.notice = ""
+	o.kickIDs = ids
+	o.kickIndex = 0
+}
+
+func (m model) handleKickKey(key string) {
+	o := m.online
+	switch key {
+	case "up", "k":
+		if o.kickIndex > 0 {
+			o.kickIndex--
+		}
+	case "down", "j":
+		if o.kickIndex < len(o.kickIDs)-1 {
+			o.kickIndex++
+		}
+	case "enter":
+		o.client.Send(online.Message{Type: online.TypeKick, PlayerID: o.kickIDs[o.kickIndex]})
+		o.kickIDs = nil
+	case "esc":
+		o.kickIDs = nil
+	}
+}
+
+// keepLobbyControlsValid fixes the lobby controls after a lobby update: the
+// menu may have shrunk with a new mode, and a player offered for kicking may
+// have left
+func (o *onlineState) keepLobbyControlsValid() {
+	if o.battle.Phase != online.BattleLobby {
+		return
+	}
+	if last := len(ui.LobbyItems(o.battle)) - 1; o.lobbyIndex > last {
+		o.lobbyIndex = last
+	}
+	if o.kickIDs == nil {
+		return
+	}
+	present := make(map[int]bool)
+	for _, p := range o.battle.Players {
+		present[p.ID] = true
+	}
+	ids := o.kickIDs[:0]
+	for _, id := range o.kickIDs {
+		if present[id] {
+			ids = append(ids, id)
+		}
+	}
+	switch {
+	case len(ids) == 0:
+		o.kickIDs = nil
+	default:
+		o.kickIDs = ids
+		o.kickIndex = min(o.kickIndex, len(ids)-1)
+	}
 }
 
 // handleNameEditKey edits the local player's name in the lobby
@@ -383,17 +578,6 @@ func (m model) handleNameEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// stepMode returns the mode delta positions away from the current one
-func stepMode(current string, delta int) string {
-	count := len(online.Modes)
-	for i, mode := range online.Modes {
-		if mode == current {
-			return online.Modes[(i+delta+count)%count]
-		}
-	}
-	return online.Modes[0]
-}
-
 func (m model) onlineView() string {
 	o := m.online
 	switch o.screen {
@@ -402,7 +586,19 @@ func (m model) onlineView() string {
 	case onlineRoom:
 		switch o.battle.Phase {
 		case online.BattleLobby:
-			return ui.RenderLobby(o.battle, o.address, o.notice, o.editingName, o.nameInput)
+			view := ui.LobbyView{
+				Selected:    o.lobbyIndex,
+				Notice:      o.notice,
+				EditingName: o.editingName,
+				NameInput:   o.nameInput,
+				KickPicker:  o.kickIDs,
+				KickIndex:   o.kickIndex,
+				Address:     o.address,
+			}
+			if w := o.wheel; w != nil {
+				view.Wheel = &ui.Wheel{Label: w.label, Steps: w.steps, Index: w.index}
+			}
+			return ui.RenderLobby(o.battle, view)
 		case online.BattleResult:
 			return ui.RenderBattleResult(o.battle)
 		default:

@@ -25,6 +25,9 @@ func newTestModel(t *testing.T, name string) model {
 	); err != nil {
 		t.Fatalf("LoadWordDictionaries: %v", err)
 	}
+	if err := g.LoadSentences("../../data/sentences.txt"); err != nil {
+		t.Fatalf("LoadSentences: %v", err)
+	}
 	cfg := config.DefaultConfig()
 	cfg.OnlinePort = testOnlinePort
 	cfg.OnlineDropDuration = 1
@@ -137,7 +140,7 @@ func TestOnlineFlow(t *testing.T) {
 	}
 	// Starting alone is refused
 	host = tick(host)
-	host, _ = pressKey(host, tea.KeyEnter)
+	host = startFromLobby(t, host)
 	if host.online.notice != "Need at least 2 players" {
 		t.Errorf("notice = %q", host.online.notice)
 	}
@@ -170,13 +173,14 @@ func TestOnlineFlow(t *testing.T) {
 	// A guest cannot start the game
 	guest, _ = pressKey(guest, tea.KeyEnter)
 
-	host, _ = pressKey(host, tea.KeyEnter)
+	host = startFromLobby(t, host)
 	runUntil(t, &host, &guest, "first word", func() bool {
 		return guest.online.battle.Phase == online.BattleFalling
 	})
 
+	wordCount := online.DefaultSettings(online.ModeWordDrop).Count
 	expected := 0
-	for i := 0; i < onlineWordCount; i++ {
+	for i := 0; i < wordCount; i++ {
 		runUntil(t, &host, &guest, "word to fall", func() bool {
 			b := guest.online.battle
 			return b.Phase == online.BattleFalling && b.WordIndex == i &&
@@ -213,7 +217,7 @@ func TestOnlineFlow(t *testing.T) {
 		return host.online.battle.Phase == online.BattleResult && guest.online.battle.Phase == online.BattleResult
 	})
 	top := host.online.battle.Ranking[0]
-	if top.Name != "Guesty" || top.Score != expected || top.Words != onlineWordCount {
+	if top.Name != "Guesty" || top.Score != expected || top.Words != wordCount {
 		t.Errorf("top rank = %+v, want Guesty with %d", top, expected)
 	}
 	if view := guest.View(); !strings.Contains(view, "You win!") {
@@ -260,7 +264,7 @@ func TestWelcomeMenuOptions(t *testing.T) {
 
 func TestOnlineMenuListsRooms(t *testing.T) {
 	m := openOnlineMenu(t, newTestModel(t, "Solo"))
-	if view := m.View(); !strings.Contains(view, "Searching for rooms...") || strings.Contains(view, "Join") {
+	if view := m.View(); !strings.Contains(view, "Searching for rooms") || strings.Contains(view, "Join") {
 		t.Errorf("empty menu view:\n%s", view)
 	}
 
@@ -319,6 +323,42 @@ func TestOnlineMenuListsRooms(t *testing.T) {
 	m, _ = pressKey(m, tea.KeyEsc)
 	if m.online.screen != onlineNone {
 		t.Errorf("esc should leave the online menu, screen=%v", m.online.screen)
+	}
+}
+
+func TestMenuNoticeFades(t *testing.T) {
+	m := openOnlineMenu(t, newTestModel(t, "Solo"))
+	m.online.setNotice("Host closed the room")
+	m = tick(m)
+	if m.online.notice == "" || !strings.Contains(m.View(), "Host closed the room") {
+		t.Fatal("a fresh notice should show")
+	}
+
+	// Pretend it appeared three seconds ago
+	m.online.noticeAt = time.Now().Add(-menuNoticeTTL)
+	m = tick(m)
+	if m.online.notice != "" || strings.Contains(m.View(), "Host closed the room") {
+		t.Errorf("notice should be gone after %v", menuNoticeTTL)
+	}
+}
+
+func TestTooSmallWindow(t *testing.T) {
+	m := newTestModel(t, "Solo")
+	resize := func(m model, w, h int) model {
+		next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+		return next.(model)
+	}
+
+	m = resize(m, 80, 24)
+	if view := m.View(); !strings.Contains(view, "Window too small") || strings.Contains(view, "Start") {
+		t.Errorf("a small window should only show the warning:\n%s", view)
+	}
+
+	// Keys still work underneath, and the game comes back on a bigger window
+	m, _ = pressKey(m, tea.KeyDown)
+	m = resize(m, 120, 40)
+	if view := m.View(); strings.Contains(view, "Window too small") || !strings.Contains(view, "> Online <") {
+		t.Errorf("an enlarged window should show the game again:\n%s", view)
 	}
 }
 
@@ -448,7 +488,7 @@ func TestRenameInLobbyUI(t *testing.T) {
 	// An unfinished edit is dropped when a game starts
 	guest, _ = pressKey(guest, tea.KeyTab)
 	guest = typeText(guest, "zzz")
-	host, _ = pressKey(host, tea.KeyEnter)
+	host = startFromLobby(t, host)
 	runUntil(t, &host, &guest, "game start", func() bool {
 		return guest.online.battle.Phase != online.BattleLobby
 	})

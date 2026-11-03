@@ -407,6 +407,20 @@ func (g *Game) DrawWords(count int) []string {
 	return texts
 }
 
+// DrawSentences returns up to count distinct sentences in random order.
+// Like DrawWords it is called from the online server's goroutine.
+func (g *Game) DrawSentences(count int) []string {
+	picked := g.rng.Perm(len(g.sentences))
+	if count < len(picked) {
+		picked = picked[:count]
+	}
+	sentences := make([]string, len(picked))
+	for i, idx := range picked {
+		sentences[i] = g.sentences[idx]
+	}
+	return sentences
+}
+
 // selectWordsFromPool selects random words from a pool without repetition
 func (g *Game) selectWordsFromPool(pool []string, count int) []Word {
 	if count <= 0 || len(pool) == 0 {

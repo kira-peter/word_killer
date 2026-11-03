@@ -11,7 +11,7 @@ import (
 
 // ProtocolVersion must match between host and players; bump it whenever the
 // wire format changes incompatibly. Version 2.0.0 sent no version (zero).
-const ProtocolVersion = 2
+const ProtocolVersion = 3
 
 // Message types exchanged between client and server
 const (
@@ -19,14 +19,21 @@ const (
 	TypeJoinAccepted = "join_accepted"
 	TypeJoinRejected = "join_rejected"
 	TypeLobby        = "lobby"
-	TypeSelectMode   = "select_mode"
+	TypeSetOption    = "set_option"
+	TypeKick         = "kick"
+	TypeKicked       = "kicked"
 	TypeRename       = "rename"
 	TypeStart        = "start"
+	TypeStartFailed  = "start_failed"
 	TypeGameStart    = "game_start"
 	TypeWordSpawn    = "word_spawn"
 	TypeClaim        = "claim"
+	TypeTyping       = "typing"
 	TypeWordClaimed  = "word_claimed"
 	TypeWordExpired  = "word_expired"
+	TypeSentence     = "sentence"
+	TypePoolSpawn    = "pool_spawn"
+	TypePoolClaimed  = "pool_claimed"
 	TypeGameOver     = "game_over"
 	TypeBackToLobby  = "back_to_lobby"
 	TypeHostClosed   = "host_closed"
@@ -45,23 +52,6 @@ const (
 	ReasonRoomFull        = "room_full"
 	ReasonInGame          = "in_game"
 )
-
-// Online game modes
-const (
-	ModeWordDrop = "word_drop"
-)
-
-// Modes lists the modes a host can choose from
-var Modes = []string{ModeWordDrop}
-
-// ModeName returns the display name of a mode
-func ModeName(mode string) string {
-	switch mode {
-	case ModeWordDrop:
-		return "Word Drop"
-	}
-	return mode
-}
 
 // PlayerInfo describes a player in the lobby
 type PlayerInfo struct {
@@ -87,6 +77,10 @@ type Message struct {
 	Reason      string       `json:"reason,omitempty"`
 	Players     []PlayerInfo `json:"players,omitempty"`
 	Mode        string       `json:"mode,omitempty"`
+	Settings    *Settings    `json:"settings,omitempty"`
+	Option      string       `json:"option,omitempty"`
+	Value       int          `json:"value,omitempty"`
+	From        int          `json:"from,omitempty"`
 	TotalWords  int          `json:"total_words,omitempty"`
 	CountdownMs int          `json:"countdown_ms,omitempty"`
 	Index       int          `json:"index,omitempty"`

@@ -1,0 +1,61 @@
+## MODIFIED Requirements
+
+### Requirement: Word Drop Round Setup
+系统 SHALL 在单词掉落对战开始时按房主设置的个数准备单词，并在倒计时结束后依次掉落。
+
+#### Scenario: Prepare words
+- **WHEN** 房主开始 Word Drop 对局
+- **THEN** 服务端应从多难度词库中取出与设置个数相同（5–30 个，默认 10 个）的互不相同的单词
+- **AND** 所有玩家的分数清零
+
+#### Scenario: Countdown before first word
+- **WHEN** 玩家收到 game_start
+- **THEN** 对战界面应显示 3、2、1 倒计时
+- **AND** 倒计时结束后，服务端下发第 1 个单词，并开始计算整局时间上限
+
+### Requirement: Single Word Falling
+系统 SHALL 一次只掉落一个单词，并在所有玩家的屏幕上同步显示。
+
+#### Scenario: Word spawn
+- **WHEN** 服务端下发 word_spawn（index、word、fall_ms）
+- **THEN** 所有玩家的界面应在掉落区顶部显示该单词
+- **AND** 清空每个玩家的输入框
+
+#### Scenario: Word falling progress
+- **WHEN** 单词处于掉落中
+- **THEN** 客户端应根据 `已过时间 / fall_ms` 计算单词所在的行
+- **AND** fall_ms 默认取 `online_drop_duration`（8 秒）
+
+#### Scenario: Next word interval
+- **WHEN** 当前单词被拿走或作废
+- **THEN** 服务端应在 1 秒后下发下一个单词，直到全部单词结束或者整局时间到
+
+### Requirement: Word Expiration
+系统 SHALL 让掉到底还没人拿到的单词作废。
+
+#### Scenario: Word reaches bottom
+- **WHEN** 单词下发后过了 fall_ms 仍然没有人拿到
+- **THEN** 服务端应广播 word_expired（index）
+- **AND** 该单词不计入任何玩家的分数，但计入设置的单词总数
+- **AND** 界面显示 “Missed!” 提示
+
+### Requirement: Battle Result
+系统 SHALL 在对局结束后结算并显示排名；所有联机玩法共用这一结算流程。
+
+#### Scenario: Game over ranking
+- **WHEN** 设置的个数全部结束，或者整局时间到（单词池玩法为游戏时长到）
+- **THEN** 服务端应广播 game_over，包含按分数从高到低排列的排名（昵称、分数、拿到的单词或句子数）
+- **AND** 分数最高的玩家为胜者；同分时并列获胜
+
+#### Scenario: Time limit reached mid-word
+- **WHEN** 整局时间到时，还有单词或句子正在进行
+- **THEN** 该单词或句子不计分，服务端立即结算
+
+#### Scenario: Early end by disconnection
+- **WHEN** 对局中在线玩家少于 2 人
+- **THEN** 服务端应立即广播 game_over，按当前分数结算
+
+#### Scenario: Back to lobby
+- **WHEN** 结算界面上房主按回车
+- **THEN** 服务端应让所有玩家回到房间大厅，保留上一局的玩法和设置，可以再来一局
+- **AND** 非房主玩家按 Esc 离开房间，回到联机菜单
